@@ -18,17 +18,17 @@ Use the sidebar to make predictions, check past cases (a.k.a. previous predictio
 st.markdown("""<h2 style='text-align: center; color: #3498DB;'>Meet The Detectives</h2>""", unsafe_allow_html=True)
 
 team_members = [
-    {"name": "Sherlock Seats", "title": "Master of Seat Upgrades", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
-    {"name": "Watson Wallet", "title": "Budget Saver Extraordinaire", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
-    {"name": "Miss Red-Eye", "title": "Lover of Late Night Flights", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
-    {"name": "Captain Layover", "title": "Finds the Longest Layovers Possible", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
-    {"name": "Professor Delay", "title": "Expert at Predicting Delays", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
+    {"name": "Ganpat Patel", "title": "StreamLit, ML Model, FastAPI & PostgreSQL", "image": "images/gp.jpg"},
+    {"name": "JatinKumar Parmar", "title": "Budget Saver Extraordinaire", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
+    {"name": "Adnan Ali", "title": "Lover of Late Night Flights", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
+    {"name": "Musa Ummar", "title": "Finds the Longest Layovers Possible", "image": "images/mu.jpg"},
+    {"name": "Manoj Kumar", "title": "Expert at Predicting Delays", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
 ]
 
 cols = st.columns(5)
 for idx, member in enumerate(team_members):
     with cols[idx]:
-        st.image(member["image"], width=100)
+        st.image(member["image"], width=150)
         st.markdown(f"**{member['name']}**")
         st.caption(member["title"])
 

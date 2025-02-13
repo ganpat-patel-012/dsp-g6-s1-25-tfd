@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from configFiles.makePrediction import get_prediction
+from configFiles.dbCode import insert_prediction
 
 def show():
     st.title("✈️ Flight Price Prediction")
@@ -40,7 +41,9 @@ def show():
                 st.write("Predicted Price (₹)",predicted_price)
 
                 result_data = {**payload, "predicted_price": predicted_price, "prediction_source": "WebApp", "prediction_type": "Single"}
-                
+                msg = insert_prediction(result_data)
+                st.success(msg)
+
                 result_df = pd.DataFrame([result_data])
                 st.subheader("✅ Prediction Result")
                 st.dataframe(result_df, use_container_width=True)
@@ -72,8 +75,10 @@ def show():
                         predicted_price = get_prediction(payload)
 
                         result_data = {**payload, "predicted_price": predicted_price,"prediction_source": "WebApp", "prediction_type": "Batch"}
+                        msg = insert_prediction(result_data)
                         results.append(result_data)
-
+                    
+                    st.success(msg)
                     result_df = pd.DataFrame(results)
                     st.subheader("✅ Prediction Results")
                     st.dataframe(result_df, use_container_width=True)

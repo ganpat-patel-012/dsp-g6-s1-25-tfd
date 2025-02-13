@@ -4,6 +4,10 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 import pandas as pd
+import psycopg2
+import psycopg2.extras
+from datetime import datetime
+from configFiles.config import DB_CONFIG
 
 # Load the trained model
 model = joblib.load("mlModel/flight_price_predictor.pkl")
@@ -52,7 +56,50 @@ def get_connection():
 
 @app.get("/past-predictions")
 def past_predictions(start_date: str, end_date: str, source: str = "all"):
-    pass
+    """
+    Fetch past predictions filtered by date range and source.
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        # Convert input strings to datetime objects (to ensure proper formatting)
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        # Base query (Extract DATE from timestamp)
+        query = """
+            SELECT * FROM predictions
+            WHERE prediction_time::DATE BETWEEN %s AND %s
+        """
+        params = [start_date, end_date]
+
+        # Apply source filter if not "All"
+        if source.lower() != "all":
+            query += " AND LOWER(prediction_source) = LOWER(%s)"
+            params.append(source)
+
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+
+        conn.close()
+
+        # Convert results into JSON-friendly format
+        predictions = [dict(row) for row in rows]
+
+        return predictions  # ✅ Always return a list
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+        # Convert results into JSON-friendly format
+        predictions = [dict(row) for row in rows]
+
+        return predictions if predictions else {"message": "No data found in the given range"}
+
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # Run this FastAPI: uvicorn configFiles.fastAPI:app --reload
