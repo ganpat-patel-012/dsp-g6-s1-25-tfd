@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from configFiles.makePrediction import get_prediction
 
 def show():
     st.title("✈️ Flight Price Prediction")
@@ -35,9 +36,14 @@ def show():
                     "stops": stops, "duration": duration, "days_left": days_left
                 }
 
-                st.write("Predicted Price (₹)")
+                predicted_price = get_prediction(payload)
+                st.write("Predicted Price (₹)",predicted_price)
 
+                result_data = {**payload, "predicted_price": predicted_price, "prediction_source": "WebApp", "prediction_type": "Single"}
+                
+                result_df = pd.DataFrame([result_data])
                 st.subheader("✅ Prediction Result")
+                st.dataframe(result_df, use_container_width=True)
 
     with tab2:
         st.subheader("📂 Upload CSV for Multi-Prediction")
@@ -63,8 +69,13 @@ def show():
                     results = []
                     for _, row in df_filtered.iterrows():
                         payload = row.to_dict()
+                        predicted_price = get_prediction(payload)
+
+                        result_data = {**payload, "predicted_price": predicted_price,"prediction_source": "WebApp", "prediction_type": "Batch"}
+                        results.append(result_data)
 
                     result_df = pd.DataFrame(results)
                     st.subheader("✅ Prediction Results")
+                    st.dataframe(result_df, use_container_width=True)
 
 show()
