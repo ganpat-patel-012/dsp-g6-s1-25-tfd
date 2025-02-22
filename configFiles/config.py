@@ -3,7 +3,7 @@ API_URL = "http://127.0.0.1:8000"
 DB_CONFIG = {
     "dbname": "dsp-tfd",
     "user": "postgres",
-    "password": "560066",
+    "password": "admin",
     "host": "localhost",
     "port": "5432"
 }

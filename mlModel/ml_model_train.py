@@ -5,7 +5,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 import pandas as pd
 
-df = pd.read_csv('/Users/ganpat-patel/dsp-ganpat-patel/TFD/data/Clean_Dataset.csv')
+df = pd.read_csv('"C:\Users\hp\dsp-g6-s1-25-tfd\data\Clean_Dataset.csv"')
 X = df.drop(columns=['price'])
 y = df['price']
 

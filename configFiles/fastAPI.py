@@ -10,7 +10,9 @@ from datetime import datetime
 from configFiles.config import DB_CONFIG
 
 # Load the trained model
-model = joblib.load("mlModel/flight_price_predictor.pkl")
+#this is updated. bellow line
+model = joblib.load(r"C:\Users\hp\dsp-g6-s1-25-tfd\mlModel\flight_price_predictor.pkl")
+
 
 # Initialize FastAPI app
 app = FastAPI()
