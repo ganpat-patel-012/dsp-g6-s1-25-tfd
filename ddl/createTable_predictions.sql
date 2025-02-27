@@ -1,4 +1,4 @@
-CREATE TABLE predictions (
+DROP TABLE IF EXISTS predictions;CREATE TABLE predictions (
     id SERIAL PRIMARY KEY,
     airline VARCHAR(50),
     source_city VARCHAR(50),
