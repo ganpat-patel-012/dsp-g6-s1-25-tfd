@@ -19,10 +19,10 @@ st.markdown("""<h2 style='text-align: center; color: #3498DB;'>Meet The Detectiv
 
 team_members = [
     {"name": "Ganpat Patel", "title": "StreamLit, ML Model, FastAPI & PostgreSQL", "image": "images/gp.jpg"},
-    {"name": "JatinKumar Parmar", "title": "Budget Saver Extraordinaire", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
-    {"name": "Adnan Ali", "title": "Lover of Late Night Flights", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
-    {"name": "Musa Ummar", "title": "Finds the Longest Layovers Possible", "image": "images/mu.jpg"},
-    {"name": "Manoj Kumar", "title": "Expert at Predicting Delays", "image": "https://cdn.pixabay.com/photo/2016/08/08/09/17/avatar-1577909_960_720.png"},
+    {"name": "JatinKumar Parmar", "title": "Data Preparation", "image": "images/jp.jpg"},
+    {"name": "Adnan Ali", "title": "Airflow Data Ingestion Job", "image": "images/aa.jpg"},
+    {"name": "Musa Ummar", "title": "Airflow Prediction Job Scheduling", "image": "images/mu.jpg"},
+    {"name": "Manoj Kumar", "title": "Grafana And PostgreSQL", "image": "images/mn.jpeg"},
 ]
 
 cols = st.columns(5)

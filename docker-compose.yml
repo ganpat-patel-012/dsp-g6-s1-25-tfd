@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: tfd_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: tfd_user
+      POSTGRES_PASSWORD: tfd_pass
+      POSTGRES_DB: tfd_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./ddl:/docker-entrypoint-initdb.d
+    networks:
+      - tfd_network
+
+  airflow:
+    image: apache/airflow:2.8.1
+    container_name: tfd_airflow
+    restart: always
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://tfd_user:tfd_pass@postgres/tfd_db
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    command: >
+      bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com && airflow webserver & airflow scheduler"
+    networks:
+      - tfd_network
+
+  fastapi:
+    build: ./
+    container_name: tfd_fastapi
+    restart: always
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+    networks:
+      - tfd_network
+
+  streamlit:
+    build: ./
+    container_name: tfd_streamlit
+    restart: always
+    depends_on:
+      - fastapi
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/app
+    networks:
+      - tfd_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tfd_grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - tfd_network
+
+volumes:
+  pg_data:
+  grafana_data:
+
+networks:
+  tfd_network:

@@ -1,9 +1,9 @@
-API_URL = "http://127.0.0.1:8000"
+API_URL = "http://tfd_fastapi:8000"
 
 DB_CONFIG = {
-    "dbname": "dsp-tfd",
-    "user": "postgres",
-    "password": "560066",
-    "host": "localhost",
+    "dbname": "tfd_db",
+    "user": "tfd_user",
+    "password": "tfd_pass",
+    "host": "tfd_postgres",
     "port": "5432"
 }
