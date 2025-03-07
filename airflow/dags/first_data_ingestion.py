@@ -21,7 +21,7 @@ logging.info(f"Good data folder: {GOOD_DATA_FOLDER}")
 @dag(
     dag_id='first_data_ingestion',
     description='Ingest one file at a time from raw_data to good_data',
-    schedule=timedelta(minutes=1),  # Runs every minute
+    schedule='*/1 * * * *',  # Runs every 2 minutes
     start_date=pendulum.today('UTC').add(days=-1),
     max_active_runs=1,  # Prevents overlapping runs
     catchup=False,
