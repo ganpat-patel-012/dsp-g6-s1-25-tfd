@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS processed_files (
+    file_name TEXT PRIMARY KEY,
+    processed_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
