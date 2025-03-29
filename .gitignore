@@ -170,3 +170,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 images/.DS_Store
+#Ignoring the data sub directory in airflow sub folder
+airflow/data/*
+!.gitkeep
+
