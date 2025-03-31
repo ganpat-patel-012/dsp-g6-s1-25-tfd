@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: tfd_postgres:5432 # The service name and port from your Docker Compose file
+    database: tfd_db
+    user: tfd_user
+    secureJsonData:
+      password: tfd_pass
+    isDefault: true

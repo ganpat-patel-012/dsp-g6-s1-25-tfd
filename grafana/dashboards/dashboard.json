@@ -1,0 +1,67 @@
+{
+    "dashboard": {
+      "id": null,
+      "title": "Predictions Monitoring Dashboard",
+      "timezone": "browser",
+      "editable": true,
+      "panels": [
+        {
+          "type": "graph",
+          "title": "Valid vs Invalid Predictions (Last 10 Minutes)",
+          "datasource": "PostgreSQL",
+          "targets": [
+            {
+              "format": "time_series",
+              "rawSql": "SELECT COUNT(*) AS total_records, COUNT(*) FILTER (WHERE predicted_price IS NOT NULL) AS valid_predictions, COUNT(*) FILTER (WHERE predicted_price IS NULL) AS invalid_predictions FROM predictions WHERE prediction_time >= NOW() - INTERVAL '10 minutes';",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [
+            { "value": 20, "color": "green" },
+            { "value": 50, "color": "orange" },
+            { "value": 70, "color": "red" }
+          ]
+        },
+        {
+          "type": "graph",
+          "title": "Average Predicted Price (Last 30 Minutes)",
+          "datasource": "PostgreSQL",
+          "targets": [
+            {
+              "format": "time_series",
+              "rawSql": "SELECT DATE_TRUNC('minute', prediction_time) AS time_bucket, AVG(predicted_price) AS avg_price FROM predictions WHERE prediction_time >= NOW() - INTERVAL '30 minutes' GROUP BY time_bucket;",
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "type": "graph",
+          "title": "Errors by Travel Class",
+          "datasource": "PostgreSQL",
+          "targets": [
+            {
+              "format": "table",
+              "rawSql": "SELECT travel_class, COUNT(*) FILTER (WHERE predicted_price IS NULL) AS error_count FROM predictions GROUP BY travel_class;",
+              "refId": "C"
+            }
+          ]
+        },
+        {
+          "type": "bar",
+          "title": "Predicted Classes Histogram (Last 30 Minutes)",
+          "datasource": "PostgreSQL",
+          "targets": [
+            {
+              "format": "time_series",
+              "rawSql": "SELECT prediction_type, COUNT(*) FROM predictions WHERE prediction_time >= NOW() - INTERVAL '30 minutes' GROUP BY prediction_type;",
+              "refId": "D"
+            }
+          ]
+        }
+      ],
+      "schemaVersion": 16,
+      "version": 1,
+      "refresh": "10s"
+    },
+    "overwrite": true
+  }
