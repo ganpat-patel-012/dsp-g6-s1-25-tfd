@@ -170,3 +170,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 images/.DS_Store
+airflow/data/*
+airflow/logs/*
+*/.DS_Store
+.DS_Store
