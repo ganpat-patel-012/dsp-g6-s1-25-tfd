@@ -35,7 +35,7 @@ def first_data_ingestion():
         files = [f for f in os.listdir(RAW_DATA_FOLDER) if f.endswith(".csv")]
         
         if not files:
-            logging.info("No new files to process.")
+            logging.info("No new files to process for data.")
             return None  # Return None to handle empty folder safely
         
         selected_file = random.choice(files)
