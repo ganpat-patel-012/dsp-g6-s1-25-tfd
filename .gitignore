@@ -174,3 +174,5 @@ airflow/data/*
 airflow/logs/*
 */.DS_Store
 .DS_Store
+input_data
+output_data

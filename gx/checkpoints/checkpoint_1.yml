@@ -1,0 +1,53 @@
+name: checkpoint_1
+config_version: 1.0
+class_name: Checkpoint
+run_name_template: "%Y-%m-%d_%H-%M-%S"
+
+validations:
+  - batch_request:
+      datasource_name: flight_data
+      data_connector_name: runtime_data_connector
+      batch_identifiers:
+        default_identifier_name: airflow_run
+    expectation_suite_name: expectations_suite_1
+    runtime_configuration:
+      result_format:
+        result_format: COMPLETE
+        include_unexpected_index_list: true
+        partial_unexpected_count: 1000
+
+action_list:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+  - name: store_evaluation_params
+    action:
+      class_name: StoreEvaluationParametersAction
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction
+
+
+
+# name: checkpoint_1
+# config_version: 1.0
+# class_name: Checkpoint
+# run_name_template: "%Y-%m-%d_%H-%M-%S"
+# validations:
+#   - batch_request:
+#       datasource_name: flight_data
+#       data_connector_name: runtime_data_connector
+#       data_asset_name: flight_data_asset
+#       batch_identifiers:
+#         default_identifier_name: airflow_run
+#     expectation_suite_name: expectations_suite
+# action_list:
+#   - name: store_validation_result
+#     action:
+#       class_name: StoreValidationResultAction
+#   - name: store_evaluation_params
+#     action:
+#       class_name: StoreEvaluationParametersAction
+#   - name: update_data_docs
+#     action:
+#       class_name: UpdateDataDocsAction
