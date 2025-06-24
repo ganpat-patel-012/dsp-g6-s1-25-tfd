@@ -1,3 +1,4 @@
+ 
 import sys
 import os
 import random
@@ -23,7 +24,7 @@ DB_CONFIG = {
     "dbname": "tfd_db",
     "user": "tfd_user",
     "password": "tfd_pass",
-    "host": "tfd_postgres"
+    "host": "tfd_postgres",  # Docker service name
     "port": "5432"
 }
  
@@ -208,7 +209,23 @@ def validate_data(**kwargs):
                         expectation_type = expectation_result['expectation_config']['expectation_type']
                         error_counts[expectation_type] = error_counts.get(expectation_type, 0) + 1
         
+        # Extract run metadata
+        run_id = results.get('run_id')
+        run_name = run_id.run_name if run_id else None
+        batch_markers = validation_results[list(validation_results.keys())[0]].get('validation_result', {}).get('meta', {}).get('batch_markers', {})
+        ge_load_time = batch_markers.get('ge_load_time')
+        pandas_data_fingerprint = batch_markers.get('pandas_data_fingerprint')
+        
+        # Attempt to get Data Docs URL
+        data_docs_url = None
+        for result_id, result in validation_results.items():
+            if 'actions_results' in result and 'update_data_docs' in result['actions_results']:
+                data_docs_urls = result['actions_results']['update_data_docs'].get('local_site')
+                if data_docs_urls:
+                    data_docs_url = data_docs_urls  # Use the first URL if multiple exist
+        
         logger.info(f"Validation results for {file_name}: success={success}, failed_expectations={failed_expectations}, error_counts={error_counts}")
+        logger.info(f"Run metadata: run_name={run_name}, ge_load_time={ge_load_time}, pandas_data_fingerprint={pandas_data_fingerprint}, data_docs_url={data_docs_url}")
     except Exception as e:
         logger.error(f"Failed to process validation results for {file_name}: {str(e)}")
         raise
@@ -219,13 +236,92 @@ def validate_data(**kwargs):
         kwargs['ti'].xcom_push(key='failed_expectations', value=failed_expectations)
         kwargs['ti'].xcom_push(key='error_counts', value=error_counts)
         kwargs['ti'].xcom_push(key='data_frame', value=df.to_dict('records'))
+        kwargs['ti'].xcom_push(key='run_name', value=run_name)
+        kwargs['ti'].xcom_push(key='ge_load_time', value=ge_load_time)
+        kwargs['ti'].xcom_push(key='pandas_data_fingerprint', value=pandas_data_fingerprint)
+        kwargs['ti'].xcom_push(key='data_docs_url', value=data_docs_url)
         logger.info(f"Pushed validation results to XCom for {file_name}")
     except Exception as e:
         logger.error(f"Failed to push XCom data for {file_name}: {str(e)}")
         raise
     
     return success
- 
+
+# def validate_data(**kwargs):
+#     """Validate the data using Great Expectations."""
+#     logger = logging.getLogger("airflow.task")
+#     file_path = kwargs['ti'].xcom_pull(key='file_path', task_ids='read_data')
+#     file_name = kwargs['ti'].xcom_pull(key='file_name', task_ids='read_data')
+    
+#     logger.info(f"Validating file: {file_name} at {file_path}")
+    
+#     if not os.path.exists(file_path):
+#         logger.error(f"File not found: {file_path}")
+#         raise FileNotFoundError(f"File {file_path} not found")
+    
+#     try:
+#         df = pd.read_csv(file_path)
+#         logger.info(f"Read {len(df)} rows from {file_name}")
+#     except Exception as e:
+#         logger.error(f"Failed to read CSV {file_name}: {str(e)}")
+#         raise
+    
+#     try:
+#         batch_request = RuntimeBatchRequest(
+#             datasource_name="flight_data",
+#             data_connector_name="runtime_data_connector",
+#             data_asset_name=file_name,
+#             runtime_parameters={"path": file_path},
+#             batch_identifiers={"default_identifier_name": "airflow_run"}
+#         )
+#         logger.info(f"Created batch request for {file_name}")
+#     except Exception as e:
+#         logger.error(f"Failed to create batch request for {file_name}: {str(e)}")
+#         raise
+    
+#     try:
+#         results = context.run_checkpoint(
+#             checkpoint_name="checkpoint_1",
+#             batch_request=batch_request
+#         )
+#         logger.info(f"Ran checkpoint for {file_name}, success: {results['success']}")
+#     except Exception as e:
+#         logger.error(f"Failed to run checkpoint for {file_name}: {str(e)}")
+#         raise
+    
+#     try:
+#         validation_results = results["run_results"]
+#         success = results["success"]
+#         failed_expectations = 0
+#         error_counts = {}
+        
+#         for result_id, result in validation_results.items():
+#             if 'validation_result' in result:
+#                 validation_result = result['validation_result']
+#                 for expectation_result in validation_result['results']:
+#                     if not expectation_result['success']:
+#                         failed_expectations += 1
+#                         expectation_type = expectation_result['expectation_config']['expectation_type']
+#                         error_counts[expectation_type] = error_counts.get(expectation_type, 0) + 1
+        
+#         logger.info(f"Validation results for {file_name}: success={success}, failed_expectations={failed_expectations}, error_counts={error_counts}")
+#     except Exception as e:
+#         logger.error(f"Failed to process validation results for {file_name}: {str(e)}")
+#         raise
+    
+#     try:
+#         kwargs['ti'].xcom_push(key='success', value=success)
+#         kwargs['ti'].xcom_push(key='validation_results', value=validation_results)
+#         kwargs['ti'].xcom_push(key='failed_expectations', value=failed_expectations)
+#         kwargs['ti'].xcom_push(key='error_counts', value=error_counts)
+#         kwargs['ti'].xcom_push(key='data_frame', value=df.to_dict('records'))
+#         logger.info(f"Pushed validation results to XCom for {file_name}")
+#     except Exception as e:
+#         logger.error(f"Failed to push XCom data for {file_name}: {str(e)}")
+#         raise
+    
+#     return success
+
 def send_alerts(**kwargs):
     logger = logging.getLogger("airflow.task")
     logger.info("Starting send_alerts task")
@@ -235,7 +331,17 @@ def send_alerts(**kwargs):
         success = kwargs['ti'].xcom_pull(key='success', task_ids='validate_data')
         failed_expectations = kwargs['ti'].xcom_pull(key='failed_expectations', task_ids='validate_data') or 0
         error_counts = kwargs['ti'].xcom_pull(key='error_counts', task_ids='validate_data') or {}
-        logger.info(f"Pulled XCom data: file_name={file_name}, success={success}, failed_expectations={failed_expectations}")
+        run_name = kwargs['ti'].xcom_pull(key='run_name', task_ids='validate_data')
+        ge_load_time = kwargs['ti'].xcom_pull(key='ge_load_time', task_ids='validate_data')
+        pandas_data_fingerprint = kwargs['ti'].xcom_pull(key='pandas_data_fingerprint', task_ids='validate_data')
+        data_docs_url = kwargs['ti'].xcom_pull(key='data_docs_url', task_ids='validate_data')
+        
+        logger.info(data_docs_url)
+
+        old_base = "file:///opt/gx/"
+        data_docs_url = data_docs_url.replace(old_base, "file:///Users/jatinkumarparmar/Desktop/dsp_project/dsp-g6-s1-25-tfd/gx/")
+        
+        logger.info(f"Pulled XCom data: file_name={file_name}, success={success}, failed_expectations={failed_expectations}, run_name={run_name}, ge_load_time={ge_load_time}, pandas_data_fingerprint={pandas_data_fingerprint}, data_docs_url={data_docs_url}")
         
         if file_name is None:
             logger.error("Missing file_name in XCom from read_data task")
@@ -246,8 +352,6 @@ def send_alerts(**kwargs):
     except Exception as e:
         logger.error(f"Failed to pull XCom data: {str(e)}")
         return
- 
-    logger.info(f"Preparing alert for {file_name}: success={success}")
     
     try:
         alert_file = os.path.join(project_root, "alerts", f"alert_{file_name}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt")
@@ -264,6 +368,7 @@ def send_alerts(**kwargs):
             """
             color = "#008000"
         else:
+        
             if failed_expectations > 10:
                 criticality = "HIGH"
                 color = "#FF0000"
@@ -280,7 +385,7 @@ def send_alerts(**kwargs):
             Total failed expectations: {failed_expectations}
             Error breakdown:
             {pformat(error_counts, indent=2)}
-            Please review the Data Docs for detailed validation results.
+            Please review the Data Docs for detailed validation results: {data_docs_url}
             """
             alert_title = f"Data Quality Alert: {file_name}"
  
@@ -320,6 +425,101 @@ def send_alerts(**kwargs):
         logger.error(f"Failed to prepare or send alert for {file_name}: {str(e)}")
         return
     logger.info("Completed send_alerts task")
+ 
+# def send_alerts(**kwargs):
+#     logger = logging.getLogger("airflow.task")
+#     logger.info("Starting send_alerts task")
+    
+#     try:
+#         file_name = kwargs['ti'].xcom_pull(key='file_name', task_ids='read_data')
+#         success = kwargs['ti'].xcom_pull(key='success', task_ids='validate_data')
+#         failed_expectations = kwargs['ti'].xcom_pull(key='failed_expectations', task_ids='validate_data') or 0
+#         error_counts = kwargs['ti'].xcom_pull(key='error_counts', task_ids='validate_data') or {}
+#         logger.info(f"Pulled XCom data: file_name={file_name}, success={success}, failed_expectations={failed_expectations}")
+        
+#         if file_name is None:
+#             logger.error("Missing file_name in XCom from read_data task")
+#             return
+#         if success is None:
+#             logger.error("Missing success status in XCom from validate_data task")
+#             return
+#     except Exception as e:
+#         logger.error(f"Failed to pull XCom data: {str(e)}")
+#         return
+ 
+#     logger.info(f"Preparing alert for {file_name}: success={success}")
+    
+#     try:
+#         alert_file = os.path.join(project_root, "alerts", f"alert_{file_name}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt")
+#         os.makedirs(os.path.dirname(alert_file), exist_ok=True)
+#         logger.info(f"Alert file path: {alert_file}")
+        
+#         if success:
+#             alert_title = f"Data Ingestion Success: {file_name}"
+#             alert_text = f"""
+#             [DATA INGESTION SUCCESS]
+#             File: {file_name}
+#             Status: All validations passed successfully.
+#             Data quality statistics saved to database.
+#             """
+#             color = "#008000"
+#         else:
+#             if failed_expectations > 10:
+#                 criticality = "HIGH"
+#                 color = "#FF0000"
+#             elif failed_expectations > 5:
+#                 criticality = "MEDIUM"
+#                 color = "#FFA500"
+#             else:
+#                 criticality = "LOW"
+#                 color = "#FFFF00"
+            
+#             alert_text = f"""
+#             [DATA QUALITY ALERT] - {criticality} severity
+#             File: {file_name}
+#             Total failed expectations: {failed_expectations}
+#             Error breakdown:
+#             {pformat(error_counts, indent=2)}
+#             Please review the Data Docs for detailed validation results.
+#             """
+#             alert_title = f"Data Quality Alert: {file_name}"
+ 
+#         logger.info("Writing alert to file")
+#         with open(alert_file, 'w') as f:
+#             f.write(f"Title: {alert_title}\nColor: {color}\n\n{alert_text}")
+#         logger.info(f"Alert logged to {alert_file}")
+ 
+#         logger.info("Preparing to send alert to Teams")
+#         teams_payload = {
+#             "@type": "MessageCard",
+#             "@context": "http://schema.org/extensions",
+#             "themeColor": color,
+#             "summary": alert_title,
+#             "sections": [{
+#                 "activityTitle": alert_title,
+#                 "text": alert_text.replace("\n", "<br>")
+#             }]
+#         }
+#         headers = {'Content-Type': 'application/json'}
+#         for attempt in range(3):
+#             try:
+#                 logger.info(f"Sending Teams request (attempt {attempt + 1})")
+#                 response = requests.post(TEAMS_WEBHOOK_URL, headers=headers, json=teams_payload, timeout=10)
+#                 if response.status_code == 200:
+#                     logger.info(f"Successfully sent alert to Microsoft Teams for {file_name}")
+#                     break
+#                 else:
+#                     logger.warning(f"Teams request failed: {response.status_code} - {response.text}")
+#             except requests.exceptions.RequestException as e:
+#                 logger.warning(f"Teams request failed (attempt {attempt + 1}): {str(e)}")
+#             if attempt < 2:
+#                 time.sleep(5)
+#         else:
+#             logger.error(f"Failed to send alert to Teams for {file_name} after 3 attempts")
+#     except Exception as e:
+#         logger.error(f"Failed to prepare or send alert for {file_name}: {str(e)}")
+#         return
+#     logger.info("Completed send_alerts task")
  
 def save_statistics(**kwargs):
     """Save data quality statistics to the database with merged error stats using psycopg2."""
@@ -471,18 +671,18 @@ def split_and_save_data(**kwargs):
  
 # DAG Definition
 default_args = {
-    "owner": "tfd_team",
+    "owner": "airflow_proo",
     "start_date": today('UTC').add(days=-1),
     "retries": 1,
     "execution_timeout": timedelta(seconds=300)
 }
  
 dag = DAG(
-    "flight_data_ingestion_validation",
+    "ingestion_validation_flight_data_proo",
     default_args=default_args,
-    schedule_interval="*/2 * * * *",
+    schedule_interval="*/1 * * * *",
     catchup=False,
-    description="Ingest and validate flight data using Great Expectations, and send alerts on teams",
+    description="Ingest and validate flight data using Great Expectations",
 )
  
 with dag:

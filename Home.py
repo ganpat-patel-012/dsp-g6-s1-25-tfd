@@ -18,8 +18,8 @@ Use the sidebar to make predictions, check past cases (a.k.a. previous predictio
 st.markdown("""<h2 style='text-align: center; color: #3498DB;'>Meet The Detectives</h2>""", unsafe_allow_html=True)
 
 team_members = [
-    {"name": "Ganpat Patel", "title": "StreamLit, ML Model, FastAPI & PostgreSQL", "image": "images/gp.jpg"},
-    {"name": "JatinKumar Parmar", "title": "Data Preparation", "image": "images/jp.jpg"},
+    {"name": "Ganpat Patel", "title": "StreamLit, ML Model, FastAPI, PostgreSQL & Docker", "image": "images/gp.jpg"},
+    {"name": "JatinKumar Parmar", "title": "Data Preparation, Data Ingestion & Validation", "image": "images/jp.jpg"},
     {"name": "Adnan Ali", "title": "Airflow Data Ingestion Job", "image": "images/aa.jpg"},
     {"name": "Musa Ummar", "title": "Airflow Prediction Job Scheduling", "image": "images/mu.jpg"},
     {"name": "Manoj Kumar", "title": "Grafana And PostgreSQL", "image": "images/mn.jpeg"},
