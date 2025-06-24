@@ -1,0 +1,86 @@
+{
+    "expectation_suite_name": "expectations_suite_1",
+    "expectations": [
+        {
+            "expectation_type": "expect_column_values_to_not_be_null",
+            "kwargs": {
+                "column": "price"
+            },
+            "meta": {
+                "notes": "Null check on price column"
+            }
+        },
+        {
+            "expectation_type": "expect_column_values_to_be_between",
+            "kwargs": {
+                "column": "days_left",
+                "min_value": 0
+            },
+            "meta": {
+                "notes": "days_left must be greater than or equal to 0"
+            }
+        },
+        {
+            "expectation_type": "expect_column_values_to_not_be_in_set",
+            "kwargs": {
+                "column": "source_city",
+                "value_set": [],
+                "row_condition": "source_city == destination_city",
+                "condition_parser": "pandas"
+            },
+            "meta": {
+                "notes": "source_city & destination_city should not be the same"
+            }
+        },
+        {
+            "expectation_type": "expect_column_values_to_not_be_in_set",
+            "kwargs": {
+                "column": "duration",
+                "value_set": ["Yes", "No"]
+            },
+            "meta": {
+                "notes": "duration column must have numeric value"
+            }
+        },
+        {
+            "expectation_type": "expect_column_values_to_not_be_in_set",
+            "kwargs": {
+                "column": "travel_class",
+                "value_set": ["Premium"]
+            },
+            "meta": {
+                "notes": "travel_class can not be a Premium"
+            }
+        },
+        {
+            "expectation_type": "expect_column_values_to_match_regex",
+            "kwargs": {
+                "column": "flight",
+                "regex": "^AI-.*$",
+                "row_condition": "airline == \"Air_India\"",
+                "condition_parser": "pandas"
+            },
+            "meta": {
+                "notes": "Air India airline has no flights with Vistara flight numbers"
+            }
+        },
+        {
+            "expectation_type": "expect_column_values_to_be_between",
+            "kwargs": {
+                "column": "duration",
+                "min_value": 0,
+                "max_value": 20,
+                "row_condition": "stops == \"zero\"",
+                "condition_parser": "pandas"
+            },
+            "meta": {
+                "notes": "duration cannot be greater than 20 if stop=zero"
+            }
+        }
+    ],
+    "ge_cloud_id": null,
+    "meta": {
+        "created_by": "Jatinkumar Parmar",
+        "notes": "Validation suite for flight data CSV files with row-level results"
+    }
+}
