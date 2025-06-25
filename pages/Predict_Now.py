@@ -74,7 +74,7 @@ def show():
                         payload = row.to_dict()
                         predicted_price = get_prediction(payload)
 
-                        result_data = {**payload, "predicted_price": predicted_price,"prediction_source": "WebApp", "prediction_type": "Batch"}
+                        result_data = {**payload, "predicted_price": predicted_price,"prediction_source": "WebApp", "prediction_type": "Multiple"}
                         msg = insert_prediction(result_data)
                         results.append(result_data)
                     

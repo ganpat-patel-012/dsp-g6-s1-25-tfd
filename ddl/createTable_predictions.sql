@@ -6,7 +6,7 @@ CREATE TABLE predictions (
     departure_time VARCHAR(50),
     arrival_time VARCHAR(50),
     travel_class VARCHAR(50),
-    stops VARCHAR(10),
+    stops VARCHAR(50),
     duration NUMERIC(5,2),
     days_left INT,
     predicted_price NUMERIC(10,2),
