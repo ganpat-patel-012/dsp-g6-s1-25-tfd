@@ -36,6 +36,7 @@ services:
       - ./database:/opt/airflow/database
       - ./input_data:/opt/input_data
       - ./output_data:/opt/output_data
+      - ./configFiles:/opt/configFiles
       - ./gx:/opt/gx
       - ./alerts:/opt/alerts
     command: >

@@ -25,7 +25,7 @@ logging.info(f"Good data folder: {GOOD_DATA_FOLDER}")
     start_date=pendulum.today('UTC').add(days=-1),
     max_active_runs=1,  # Prevents overlapping runs
     catchup=False,
-    tags=['dsp_project', 'data_ingestion']
+    tags=['data_ingestion']
 )
 def first_data_ingestion():
 

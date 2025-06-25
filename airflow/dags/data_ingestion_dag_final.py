@@ -678,10 +678,11 @@ default_args = {
 }
  
 dag = DAG(
-    "ingestion_validation_flight_data_proo",
+    "ingestion_job_flight_data_proo",
     default_args=default_args,
-    schedule_interval="*/1 * * * *",
+    schedule_interval="*/2 * * * *",
     catchup=False,
+    tags=["data_ingestion"],
     description="Ingest and validate flight data using Great Expectations",
 )
  
