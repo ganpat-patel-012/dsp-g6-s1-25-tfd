@@ -1,3 +1,4 @@
+version: '3.8'
 services:
   postgres:
     image: postgres:15
@@ -12,6 +13,33 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./ddl:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tfd_user -d tfd_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tfd_network
+
+  airflow-init:
+    image: apache/airflow:2.8.1
+    container_name: tfd_airflow_init
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__ENABLE_XCOM_PICKLING=True
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://tfd_user:tfd_pass@postgres/tfd_db
+      - GX_HOME=/opt/gx
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./requirements.txt:/requirements.txt
+      - ./database:/opt/airflow/database
+    command: >
+      bash -c "pip install --no-cache-dir -r /requirements.txt && 
+               until airflow db check; do echo 'Waiting for PostgreSQL...'; sleep 2; done && 
+               if ! airflow db check-migrations; then airflow db init; fi && 
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true"
     networks:
       - tfd_network
 
@@ -25,7 +53,10 @@ services:
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://tfd_user:tfd_pass@postgres/tfd_db
       - GX_HOME=/opt/gx
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     volumes:
@@ -40,7 +71,7 @@ services:
       - ./gx:/opt/gx
       - ./alerts:/opt/alerts
     command: >
-      bash -c "pip install --no-cache-dir -r /requirements.txt && airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com && airflow webserver & airflow scheduler"
+      bash -c "pip install --no-cache-dir -r /requirements.txt && airflow webserver & airflow scheduler"
     networks:
       - tfd_network
 
@@ -49,7 +80,8 @@ services:
     container_name: tfd_fastapi
     restart: always
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -62,7 +94,8 @@ services:
     container_name: tfd_streamlit
     restart: always
     depends_on:
-      - fastapi
+      fastapi:
+        condition: service_started
     ports:
       - "8501:8501"
     volumes:
@@ -74,6 +107,9 @@ services:
     image: grafana/grafana:latest
     container_name: tfd_grafana
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "3000:3000"
     volumes:
@@ -87,6 +123,7 @@ services:
 volumes:
   pg_data:
   grafana_data:
+  database:
 
 networks:
   tfd_network:
