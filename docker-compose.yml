@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   postgres:
-    image: postgres:15  # Use postgres:15 as per your first definition
+    image: postgres:15
     container_name: tfd_postgres
     restart: always
     environment:
@@ -9,10 +9,10 @@ services:
       POSTGRES_PASSWORD: tfd_pass
       POSTGRES_DB: tfd_db
     ports:
-      - "5433:5432"  # Map host port 5433 to container port 5432
+      - "5433:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./ddl:/docker-entrypoint-initdb.d  # Initialize database with DDL scripts
+      - ./ddl:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tfd_user -d tfd_db"]
       interval: 5s
@@ -34,7 +34,7 @@ services:
         condition: service_healthy
     volumes:
       - ./requirements.txt:/requirements.txt
-      - ./database:/opt/airflow/database  # Share metadata database volume
+      - ./database:/opt/airflow/database
     command: >
       bash -c "pip install --no-cache-dir -r /requirements.txt && 
                until airflow db check; do echo 'Waiting for PostgreSQL...'; sleep 2; done && 
@@ -95,7 +95,7 @@ services:
     restart: always
     depends_on:
       fastapi:
-        condition: service_started  # Minimal condition; consider healthcheck if FastAPI exposes one
+        condition: service_started
     ports:
       - "8501:8501"
     volumes:
@@ -109,7 +109,7 @@ services:
     restart: always
     depends_on:
       postgres:
-        condition: service_healthy  # If Grafana uses PostgreSQL as a data source
+        condition: service_healthy
     ports:
       - "3000:3000"
     volumes:
@@ -123,7 +123,7 @@ services:
 volumes:
   pg_data:
   grafana_data:
-  database:  # Explicit volume for Airflow metadata
+  database:
 
 networks:
   tfd_network:
