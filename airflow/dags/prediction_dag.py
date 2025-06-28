@@ -17,7 +17,7 @@ default_args = {
     schedule='@daily',  # Run daily
     start_date=datetime(2024, 5, 19),
     catchup=False,
-    tags=['data_prediction']
+    tags=['data_prediction_defence_1']
 )
 def prediction_dag():
 

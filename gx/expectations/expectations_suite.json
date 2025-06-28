@@ -1,5 +1,5 @@
 {
-    "expectation_suite_name": "expectations_suite_1",
+    "expectation_suite_name": "expectations_suite",
     "expectations": [
         {
             "expectation_type": "expect_column_values_to_not_be_null",

@@ -77,14 +77,14 @@ def get_prediction(payload):
 
 # DAG configuration
 default_args = {
-    "owner": "airflow_proooo",
+    "owner": "tfd_team",
     "retries": 1,
     "start_date": today('UTC').add(days=-1),
     "execution_timeout": timedelta(seconds=300)
 }
 
 @dag(
-    dag_id="prediction_job_flight_data_proo",
+    dag_id="prediction_job_flight_data_final",
     default_args=default_args,
     schedule_interval="*/2 * * * *",  # Run every 2 minutes
     start_date=today("UTC").add(days=-1),
