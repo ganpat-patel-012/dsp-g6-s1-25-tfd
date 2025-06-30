@@ -5,21 +5,16 @@ from datetime import timedelta
 from pendulum import today
 import pandas as pd
 import os
+import sys
 import requests
 import psycopg2
 from psycopg2 import sql
 from datetime import datetime
 
-# Configuration
-API_URL = "http://tfd_fastapi:8000"
-
-DB_CONFIG = {
-    "dbname": "tfd_db",
-    "user": "tfd_user",
-    "password": "tfd_pass",
-    "host": "tfd_postgres",
-    "port": "5432"
-}
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from configFiles.config import DB_CONFIG, API_URL
+from configFiles.dbCode import insert_prediction
+from configFiles.makePrediction import get_prediction
 
 # Paths
 GOOD_DATA_FOLDER = "/opt/output_data/good_data"
@@ -34,46 +29,6 @@ logger = logging.getLogger("airflow.task")
 if not os.path.exists(GOOD_DATA_FOLDER):
     logger.error(f"Good data folder does not exist: {GOOD_DATA_FOLDER}")
     raise FileNotFoundError(f"Good data folder does not exist: {GOOD_DATA_FOLDER}")
-
-# Database functions
-def get_connection():
-    """Establishes a PostgreSQL connection."""
-    return psycopg2.connect(**DB_CONFIG)
-
-def insert_prediction(data):
-    """Inserts prediction data into PostgreSQL."""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                insert_query = sql.SQL("""
-                    INSERT INTO predictions 
-                    (airline, source_city, destination_city, departure_time, arrival_time, 
-                    travel_class, stops, duration, days_left, predicted_price, 
-                    prediction_source, prediction_time, prediction_type) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-                """)
-                cursor.execute(insert_query, (
-                    data["airline"], data["source_city"], data["destination_city"],
-                    data["departure_time"], data["arrival_time"], data["travel_class"],
-                    data["stops"], data["duration"], data["days_left"],
-                    data["predicted_price"], data["prediction_source"], datetime.now(), data["prediction_type"]
-                ))
-            conn.commit()
-        return "✅ Prediction saved to database!"
-    except Exception as e:
-        return f"❌ Database Error: {e}"
-
-# API function
-def get_prediction(payload):
-    """Calls FastAPI endpoint and returns the predicted price."""
-    try:
-        response = requests.post(f"{API_URL}/predict", json=payload)
-        if response.status_code == 200:
-            return response.json().get("predicted_price", "N/A")
-        else:
-            return f"Error {response.status_code}"
-    except requests.RequestException as e:
-        return f"❌ API Request Failed: {e}"
 
 # DAG configuration
 default_args = {
