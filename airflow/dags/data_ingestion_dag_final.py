@@ -35,24 +35,6 @@ def get_connection():
         logging.error(f"Failed to establish database connection: {str(e)}")
         raise
 
-# Data Quality Schema (for reference, not used directly with psycopg2)
-from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
-
-class DataQualityStat(Base):
-    __tablename__ = "data_quality_stats"
-    id = Column(Integer, primary_key=True)
-    filename = Column(String, nullable=False)
-    total_rows = Column(Integer, nullable=False)
-    valid_rows = Column(Integer, nullable=False)
-    invalid_rows = Column(Integer, nullable=False)
-    error_details = Column(Text, nullable=True)  # JSONB for error types and counts
-    error_count = Column(Integer, nullable=True)  # Total number of errors
-    severity = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
 # Paths
 project_root = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir, os.pardir))
 RAW_DATA_FOLDER = os.path.join(project_root, "input_data", "raw_data")
@@ -185,20 +167,44 @@ def validate_data(**kwargs):
         success = results["success"]
         validation_results = results["run_results"]
         
-        # Extract data docs URL
-        data_docs_url = None
-        for result_id, result in validation_results.items():
-            if 'actions_results' in result and 'update_data_docs' in result['actions_results']:
-                data_docs_urls = result['actions_results']['update_data_docs'].get('local_site')
-                if data_docs_urls:
-                    data_docs_url = data_docs_urls
-                    break
+        # Get the most recent validation file for this run
+        specific_validation_url = None
+        try:
+            validations_base_path = "/Users/jatinkumarparmar/Documents/GitHub/dsp_project/dsp-g6-s1-25-tfd/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
+            if os.path.exists(validations_base_path):
+                validation_dirs = []
+                for item in os.listdir(validations_base_path):
+                    item_path = os.path.join(validations_base_path, item)
+                    if os.path.isdir(item_path):
+                        validation_dirs.append((item_path, os.path.getmtime(item_path)))
+                
+                validation_dirs.sort(key=lambda x: x[1], reverse=True)
+                
+                if validation_dirs:
+                    most_recent_dir, _ = validation_dirs[0]
+                    html_files = [f for f in os.listdir(most_recent_dir) if f.endswith('.html')]
+                    if html_files:
+                        html_file = html_files[0]
+                        dir_name = os.path.basename(most_recent_dir)
+                        specific_validation_url = f"file:///opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite/{dir_name}/{html_file}"
+        
+        except Exception as e:
+            logger.error(f"Error finding specific validation URL: {str(e)}")
+        
+        # Fallback to general data docs URL if specific URL not found
+        if not specific_validation_url:
+            for result_id, result in validation_results.items():
+                if 'actions_results' in result and 'update_data_docs' in result['actions_results']:
+                    data_docs_urls = result['actions_results']['update_data_docs'].get('local_site')
+                    if data_docs_urls:
+                        specific_validation_url = data_docs_urls
+                        break
         
         logger.info(f"Validation completed for {file_name}, success: {success}")
         
         kwargs['ti'].xcom_push(key='success', value=success)
         kwargs['ti'].xcom_push(key='data_frame', value=df.to_dict('records'))
-        kwargs['ti'].xcom_push(key='data_docs_url', value=data_docs_url)
+        kwargs['ti'].xcom_push(key='data_docs_url', value=specific_validation_url)
         
     except Exception as e:
         logger.error(f"Failed to validate {file_name}: {str(e)}")
@@ -318,14 +324,22 @@ def send_alerts(**kwargs):
     if overall_severity is None:
         overall_severity = "none"
     
-    # Update data docs URL path
+    # Process data docs URL to make it clickable
+    clickable_data_docs_url = "N/A"
     if data_docs_url:
-        old_base = "file:///opt/gx/"
-        data_docs_url = data_docs_url.replace(old_base, "file:///Users/jatinkumarparmar/Documents/GitHub/dsp_project/dsp-g6-s1-25-tfd/gx")
-    else:
-        data_docs_url = "N/A"
+        # Convert file:// URL to a web-accessible URL
+        if data_docs_url.startswith("file:///opt/gx/"):
+            # Use the local web server URL we set up
+            web_base_url = "http://localhost:8081/gx"
+            # Remove the file:///opt/gx/ prefix and get the relative path
+            relative_path = data_docs_url.replace("file:///opt/gx/", "")
+            # Clean up any potential path issues
+            relative_path = relative_path.replace("//", "/")
+            clickable_data_docs_url = f"{web_base_url}/{relative_path}"
+        else:
+            clickable_data_docs_url = data_docs_url
     
-    # Create alert content
+    # Create alert content (keeping original format)
     if success:
         alert_title = f"Data Ingestion Success: {file_name}"
         alert_text = f"""
@@ -340,6 +354,12 @@ def send_alerts(**kwargs):
         if not error_breakdown:
             error_breakdown = "No specific error types detected."
         
+        # Create clickable link for data docs URL
+        if clickable_data_docs_url != "N/A":
+            data_docs_link = f'<a href="{clickable_data_docs_url}">View Data Docs</a>'
+        else:
+            data_docs_link = "N/A"
+        
         alert_title = f"Data Quality Alert: {file_name}"
         alert_text = f"""
         [DATA QUALITY ALERT] - {overall_severity}
@@ -347,7 +367,7 @@ def send_alerts(**kwargs):
         Total failed expectations: {error_count}
         Error breakdown:
         {error_breakdown}
-        Please review the Data Docs for detailed validation results: {data_docs_url}
+        Please review the Data Docs for detailed validation results: {data_docs_link}
         """
         color_map = {"high": "#FF0000", "medium": "#FFA500", "low": "#FFFF00", "none": "#008000"}
         color = color_map.get(overall_severity, "#FFFF00")
@@ -363,7 +383,35 @@ def send_alerts(**kwargs):
     except Exception as e:
         logger.error(f"Failed to write alert file: {str(e)}")
     
-    # Send to Teams
+    # Send to Teams (keeping original format, just making URL clickable)
+    # Create separate text for Teams with proper HTML formatting
+    if success:
+        teams_text = f"""
+        [DATA INGESTION SUCCESS]
+        File: {file_name}
+        Status: All validations passed successfully.
+        Data quality statistics saved to database.
+        """
+    else:
+        error_breakdown_text = "\n".join([f"{error_type}: {count}" for error_type, count in custom_error_stats.items() if count > 0])
+        if not error_breakdown_text:
+            error_breakdown_text = "No specific error types detected."
+        
+        # Create clickable link for data docs URL
+        if clickable_data_docs_url != "N/A":
+            data_docs_link = f'<a href="{clickable_data_docs_url}">View Data Docs</a>'
+        else:
+            data_docs_link = "N/A"
+        
+        teams_text = f"""
+        [DATA QUALITY ALERT] - {overall_severity}
+        File: {file_name}
+        Total failed expectations: {error_count}
+        Error breakdown:
+        {error_breakdown_text}
+        Please review the Data Docs for detailed validation results: {data_docs_link}
+        """
+    
     teams_payload = {
         "@type": "MessageCard",
         "@context": "http://schema.org/extensions",
@@ -371,7 +419,7 @@ def send_alerts(**kwargs):
         "summary": alert_title,
         "sections": [{
             "activityTitle": alert_title,
-            "text": alert_text.replace("\n", "<br>")
+            "text": teams_text.replace("\n", "<br>")
         }]
     }
     
