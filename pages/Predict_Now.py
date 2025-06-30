@@ -1,25 +1,21 @@
 import streamlit as st
 import pandas as pd
-from configFiles.makePrediction import get_prediction
+from configFiles.makePrediction import get_prediction, get_batch_prediction
 from configFiles.dbCode import insert_prediction
 
 def show():
     st.title("✈️ Flight Price Prediction")
-
     tab1, tab2 = st.tabs(["📌 Single Prediction", "📂 Multi Prediction"])
 
     with tab1:
         st.subheader("🔍 Single Prediction")
-
         col1, col2 = st.columns(2)
-
         with col1:
             airline = st.selectbox("✈️ Airline", ["AirAsia", "Air_India", "GO_FIRST", "Indigo", "SpiceJet", "Vistara"])
             source_city = st.selectbox("📍 Source City", ["Bangalore", "Chennai", "Delhi", "Hyderabad", "Kolkata", "Mumbai"])
             departure_time = st.selectbox("🛫 Departure Time", ["Early_Morning", "Morning", "Afternoon", "Evening", "Night", "Late_Night"])
             travel_class = st.selectbox("💺 Class", ["Business", "Economy"])
             stops = st.selectbox("⏳ Total Stops", ["zero", "one", "two_or_more"])
-
         with col2:
             destination_city = st.selectbox("📍 Destination City", ["Chennai", "Bangalore", "Delhi", "Hyderabad", "Kolkata", "Mumbai"])
             arrival_time = st.selectbox("🛬 Arrival Time", ["Early_Morning", "Morning", "Afternoon", "Evening", "Night", "Late_Night"])
@@ -36,17 +32,13 @@ def show():
                     "arrival_time": arrival_time, "travel_class": travel_class,
                     "stops": stops, "duration": duration, "days_left": days_left
                 }
-
                 predicted_price = get_prediction(payload)
-                st.write("Predicted Price (₹)",predicted_price)
+                st.write("Predicted Price (₹)", predicted_price)
 
                 result_data = {**payload, "predicted_price": predicted_price, "prediction_source": "WebApp", "prediction_type": "Single"}
                 msg = insert_prediction(result_data)
                 st.success(msg)
-
-                result_df = pd.DataFrame([result_data])
-                st.subheader("✅ Prediction Result")
-                st.dataframe(result_df, use_container_width=True)
+                st.dataframe(pd.DataFrame([result_data]), use_container_width=True)
 
     with tab2:
         st.subheader("📂 Upload CSV for Multi-Prediction")
@@ -60,7 +52,7 @@ def show():
             required_columns = ["airline", "source_city", "destination_city", "departure_time", "arrival_time", 
                                 "travel_class", "stops", "duration", "days_left"]
             missing_cols = [col for col in required_columns if col not in df.columns]
-            
+
             if missing_cols:
                 st.error(f"❌ Missing columns: {', '.join(missing_cols)}")
             else:
@@ -69,18 +61,18 @@ def show():
                     st.warning("⚠️ Some rows were removed due to same source & destination.")
 
                 if st.button("🚀 Predict for CSV"):
-                    results = []
-                    for _, row in df_filtered.iterrows():
-                        payload = row.to_dict()
-                        predicted_price = get_prediction(payload)
-
-                        result_data = {**payload, "predicted_price": predicted_price,"prediction_source": "WebApp", "prediction_type": "Multiple"}
-                        msg = insert_prediction(result_data)
-                        results.append(result_data)
+                    payload_list = df_filtered.to_dict(orient="records")
+                    predictions = get_batch_prediction(payload_list)
                     
-                    st.success(msg)
-                    result_df = pd.DataFrame(results)
-                    st.subheader("✅ Prediction Results")
-                    st.dataframe(result_df, use_container_width=True)
+                    counter = 0
+                    for i, pred in enumerate(predictions):
+                        payload_list[i]["predicted_price"] = pred["predicted_price"]
+                        payload_list[i]["prediction_source"] = "WebApp"
+                        payload_list[i]["prediction_type"] = "Multiple"
+                        msg = insert_prediction(payload_list[i])
+                        counter += 1
+
+                    st.success(f"✅ Batch {counter} predictions saved successfully. {msg}")
+                    st.dataframe(pd.DataFrame(payload_list), use_container_width=True)
 
 show()
