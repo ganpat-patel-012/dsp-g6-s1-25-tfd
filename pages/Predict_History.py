@@ -18,29 +18,34 @@ def show():
     )
 
     if st.button("🔄 Fetch Predictions"):
-        response = requests.get(f"{API_URL}/past-predictions", params={
-            "start_date": start_date,
-            "end_date": end_date,
-            "source": source_filter.lower()
-        })
+        try:
+            response = requests.get(f"{API_URL}/past-predictions", params={
+                "start_date": start_date,
+                "end_date": end_date,
+                "source": source_filter.lower()
+            })
 
-        if response.status_code == 200:
-            data = response.json()
+            if response.status_code == 200:
+                data = response.json()
 
-            # ✅ Check if data is empty before converting to DataFrame
-            if not data or len(data) == 0:
-                st.warning("⚠️ No prediction history found for the selected filters.")
-                return
-            
-            df = pd.DataFrame(data)
-            
-            # ✅ Ensure the response contains an "id" column before setting it as index
-            if "id" in df.columns:
-                df = df.set_index("id")
+                # ✅ Ensure the response is a list of dicts
+                if not isinstance(data, list) or len(data) == 0:
+                    st.warning("⚠️ No prediction history found for the selected filters.")
+                    return
 
-            st.subheader("✅ Prediction Results")
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.error(f"❌ Failed to fetch data: {response.status_code}")
+                df = pd.DataFrame(data)
+
+                # ✅ Set 'id' as index if it exists
+                if "id" in df.columns:
+                    df = df.set_index("id")
+
+                st.subheader("✅ Prediction Results")
+                st.dataframe(df, use_container_width=True)
+
+            else:
+                st.error(f"❌ Failed to fetch data: {response.status_code}")
+
+        except Exception as e:
+            st.error(f"❌ Error fetching data: {str(e)}")
 
 show()
