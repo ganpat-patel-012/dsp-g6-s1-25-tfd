@@ -33,9 +33,6 @@ BAD_DATA_FOLDER = os.path.join(project_root, "output_data", "bad_data")
 os.makedirs(GOOD_DATA_FOLDER, exist_ok=True)
 os.makedirs(BAD_DATA_FOLDER, exist_ok=True)
 
-# Teams webhook URL
-# TEAMS_WEBHOOK_URL = "https://epitafr.webhook.office.com/webhookb2/463ace8d-55de-416c-af6f-0d944ddcd0c6@3534b3d7-316c-4bc9-9ede-605c860f49d2/IncomingWebhook/20883631084a48d5b172851613d551d5/2ee1ac5b-a7da-4763-a97e-b0cee3001618/V2ES_q8c8S2QMVddhkpxeM26E-W7v-O-tJPxr8dZP096w1"
-
 # Great Expectations Context
 context = DataContext(context_root_dir="/opt/gx")
 
@@ -158,83 +155,67 @@ def validate_data(**kwargs):
         # Get the specific validation URL for this run
         specific_validation_url = None
         try:
-            # Get the validation result ID and run name from the results
             validation_result_id = None
             run_name = None
-            
+            logger.info(f"Looking for validation result URL in run_results: {list(validation_results.keys())}")
             for result_id, result in validation_results.items():
                 logger.info(f"Processing result_id: {result_id}")
-                
                 # Extract validation result ID
                 if 'validation_result' in result and 'meta' in result['validation_result']:
                     validation_result_id = result['validation_result']['meta'].get('run_id', {}).get('run_name')
                     logger.info(f"Found validation_result_id: {validation_result_id}")
-                
                 # Extract run name
                 if 'run_id' in result:
                     run_name = result['run_id'].get('run_name')
                     logger.info(f"Found run_name: {run_name}")
-                
                 # Look for the validation result in the run_results
                 if 'actions_results' in result and 'update_data_docs' in result['actions_results']:
-                    # Get the local_site URL from the update_data_docs action
                     data_docs_urls = result['actions_results']['update_data_docs'].get('local_site')
                     logger.info(f"Data docs URLs from action: {data_docs_urls}")
                     if data_docs_urls:
-                        # The data_docs_urls should contain the specific validation result URL
                         specific_validation_url = data_docs_urls
                         break
-            
-            # If we couldn't get the URL from the results, try to construct it manually using the validation result ID
+            validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
+            # Try to construct using validation_result_id
             if not specific_validation_url and validation_result_id:
                 logger.info(f"Constructing URL using validation_result_id: {validation_result_id}")
-                # Construct the path to the specific validation result
-                validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
                 if os.path.exists(validations_base_path):
-                    # Look for the directory that matches the validation result ID
                     for item in os.listdir(validations_base_path):
                         item_path = os.path.join(validations_base_path, item)
+                        logger.info(f"Checking directory: {item_path}")
                         if os.path.isdir(item_path) and validation_result_id in item:
                             logger.info(f"Found matching directory: {item}")
-                            # Find the HTML file in this directory
                             html_files = [f for f in os.listdir(item_path) if f.endswith('.html')]
                             if html_files:
                                 html_file = html_files[0]
                                 specific_validation_url = f"file:///opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite/{item}/{html_file}"
                                 logger.info(f"Constructed specific validation URL: {specific_validation_url}")
                                 break
-            
-            # If still no specific URL, try using the run name
+            # Try using run_name
             if not specific_validation_url and run_name:
                 logger.info(f"Attempting to construct URL using run_name: {run_name}")
-                validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
                 if os.path.exists(validations_base_path):
-                    # Look for the directory that matches the run name
                     for item in os.listdir(validations_base_path):
                         item_path = os.path.join(validations_base_path, item)
+                        logger.info(f"Checking directory: {item_path}")
                         if os.path.isdir(item_path) and run_name in item:
                             logger.info(f"Found matching directory: {item}")
-                            # Find the HTML file in this directory
                             html_files = [f for f in os.listdir(item_path) if f.endswith('.html')]
                             if html_files:
                                 html_file = html_files[0]
                                 specific_validation_url = f"file:///opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite/{item}/{html_file}"
                                 logger.info(f"Constructed specific validation URL: {specific_validation_url}")
                                 break
-            
-            # If still no specific URL, try to get the most recent validation for this specific file
+            # Fallback: most recent validation for this file
             if not specific_validation_url:
                 logger.info("Attempting to find most recent validation for this specific file")
-                validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
                 if os.path.exists(validations_base_path):
                     validation_dirs = []
                     for item in os.listdir(validations_base_path):
                         item_path = os.path.join(validations_base_path, item)
                         if os.path.isdir(item_path):
                             validation_dirs.append((item_path, os.path.getmtime(item_path)))
-                    
                     validation_dirs.sort(key=lambda x: x[1], reverse=True)
-                    
                     if validation_dirs:
                         most_recent_dir, _ = validation_dirs[0]
                         html_files = [f for f in os.listdir(most_recent_dir) if f.endswith('.html')]
@@ -243,21 +224,28 @@ def validate_data(**kwargs):
                             dir_name = os.path.basename(most_recent_dir)
                             specific_validation_url = f"file:///opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite/{dir_name}/{html_file}"
                             logger.info(f"Using most recent validation URL: {specific_validation_url}")
-        
+            # Final fallback: search for any HTML file in validations directory
+            if not specific_validation_url:
+                logger.info("Final fallback: searching for any HTML file in validations directory")
+                if os.path.exists(validations_base_path):
+                    for root, dirs, files in os.walk(validations_base_path):
+                        for file in files:
+                            if file.endswith('.html'):
+                                specific_validation_url = f"file://{os.path.join(root, file)}"
+                                logger.info(f"Found fallback HTML file: {specific_validation_url}")
+                                break
+                        if specific_validation_url:
+                            break
         except Exception as e:
             logger.error(f"Error finding specific validation URL: {str(e)}")
-        
         logger.info(f"Validation completed for {file_name}, success: {success}")
         logger.info(f"Final specific validation URL: {specific_validation_url}")
-        
         kwargs['ti'].xcom_push(key='success', value=success)
         kwargs['ti'].xcom_push(key='data_frame', value=df.to_dict('records'))
         kwargs['ti'].xcom_push(key='data_docs_url', value=specific_validation_url)
-        
     except Exception as e:
         logger.error(f"Failed to validate {file_name}: {str(e)}")
         raise
-    
     return success
 
 def save_statistics(**kwargs):
@@ -341,14 +329,12 @@ def save_statistics(**kwargs):
 def send_alerts(**kwargs):
     """Send alerts to Teams and save to file."""
     logger = logging.getLogger("airflow.task")
-    
     file_name = kwargs['ti'].xcom_pull(key='file_name', task_ids='read_data')
     success = kwargs['ti'].xcom_pull(key='success', task_ids='validate_data')
     custom_error_stats = kwargs['ti'].xcom_pull(key='custom_error_stats', task_ids='save_statistics')
     error_count = kwargs['ti'].xcom_pull(key='error_count', task_ids='save_statistics')
     overall_severity = kwargs['ti'].xcom_pull(key='overall_severity', task_ids='save_statistics')
     data_docs_url = kwargs['ti'].xcom_pull(key='data_docs_url', task_ids='validate_data')
-    
     # Fallback to database if XCom data is missing
     if any(x is None for x in [custom_error_stats, error_count, overall_severity]):
         try:
@@ -364,29 +350,39 @@ def send_alerts(**kwargs):
                         error_count = result[1] if result[1] is not None else 0
                         overall_severity = result[2]
                     else:
-                        raise ValueError(f"No database entry found for {file_name}")
+                        logger.warning(f"No database entry found for {file_name}. Skipping alert.")
+                        return
         except Exception as e:
             logger.error(f"Failed to query database for {file_name}: {str(e)}")
-            raise
-    
+            return
     if overall_severity is None:
         overall_severity = "none"
-    
     # Process data docs URL to make it clickable
     clickable_data_docs_url = "N/A"
     if data_docs_url:
-        # Convert file:// URL to a web-accessible URL
         if data_docs_url.startswith("file:///opt/gx/"):
-            # Use the local web server URL we set up
             web_base_url = "http://localhost:8081/gx"
-            # Remove the file:///opt/gx/ prefix and get the relative path
             relative_path = data_docs_url.replace("file:///opt/gx/", "")
-            # Clean up any potential path issues
             relative_path = relative_path.replace("//", "/")
             clickable_data_docs_url = f"{web_base_url}/{relative_path}"
         else:
             clickable_data_docs_url = data_docs_url
-    
+    else:
+        # Fallback: search for any HTML file in validations directory
+        validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
+        logger.info("No data_docs_url from XCom, searching for any HTML file in validations directory as fallback.")
+        if os.path.exists(validations_base_path):
+            found_html = None
+            for root, dirs, files in os.walk(validations_base_path):
+                for file in files:
+                    if file.endswith('.html'):
+                        found_html = os.path.join(root, file)
+                        break
+                if found_html:
+                    break
+            if found_html:
+                clickable_data_docs_url = f"http://localhost:8081/gx/{found_html.replace('/opt/gx/', '')}"
+                logger.info(f"Fallback clickable_data_docs_url: {clickable_data_docs_url}")
     # Create alert content (keeping original format)
     if success:
         alert_title = f"Data Ingestion Success: {file_name}"
