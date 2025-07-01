@@ -4,27 +4,26 @@
         {
             "expectation_type": "expect_column_values_to_not_be_null",
             "kwargs": {
-                "column": "price"
+                "column": "airline"
             },
             "meta": {
-                "notes": "Null check on price column"
+                "notes": "Null check on airline column"
             }
         },
         {
             "expectation_type": "expect_column_values_to_be_between",
             "kwargs": {
-                "column": "days_left",
+                "column": "duration",
                 "min_value": 0
             },
             "meta": {
-                "notes": "days_left must be greater than or equal to 0"
+                "notes": "duraion must be greater than 0"
             }
         },
         {
-            "expectation_type": "expect_column_values_to_not_be_in_set",
+            "expectation_type": "expect_column_values_to_be_null",
             "kwargs": {
                 "column": "source_city",
-                "value_set": [],
                 "row_condition": "source_city == destination_city",
                 "condition_parser": "pandas"
             },
@@ -35,11 +34,11 @@
         {
             "expectation_type": "expect_column_values_to_not_be_in_set",
             "kwargs": {
-                "column": "duration",
+                "column": "days_left",
                 "value_set": ["Yes", "No"]
             },
             "meta": {
-                "notes": "duration column must have numeric value"
+                "notes": "days_left column must have numeric value"
             }
         },
         {
@@ -68,10 +67,11 @@
             "expectation_type": "expect_column_values_to_be_between",
             "kwargs": {
                 "column": "duration",
-                "min_value": 0,
-                "max_value": 20,
+                "min_value": 0.0,
+                "max_value": 20.0,
                 "row_condition": "stops == \"zero\"",
-                "condition_parser": "pandas"
+                "condition_parser": "pandas",
+                "parse_strings_as_datetimes": false
             },
             "meta": {
                 "notes": "duration cannot be greater than 20 if stop=zero"
