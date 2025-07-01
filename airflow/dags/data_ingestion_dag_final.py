@@ -58,8 +58,7 @@ def get_unexpected_indices(df, file_name):
             error_indices.update(airline_name_null)
             error_stats["airline_name_null"] = len(airline_name_null)
 
-
-        # Negative duration values - convert to numeric first (safe conversion)
+        # Negative duration values
         duration_numeric = pd.to_numeric(df['duration'], errors='coerce')
         negative_duration = df[(duration_numeric < 0) & (duration_numeric.notna())].index
         if len(negative_duration) > 0:
@@ -72,8 +71,7 @@ def get_unexpected_indices(df, file_name):
             error_indices.update(same_cities)
             error_stats["same_cities"] = len(same_cities)
 
-        # Invalid days_left values (checking for non-numeric values like 'Yes', 'No')
-        # Convert days_left to string safely and check for invalid values
+        # Convert days_left to string and check for invalid values
         days_left_str = df['days_left'].astype(str)
         invalid_days_left = df[days_left_str.isin(['Yes', 'No'])].index
         if len(invalid_days_left) > 0:
@@ -104,6 +102,17 @@ def get_unexpected_indices(df, file_name):
         raise
     
     return list(error_indices), error_stats
+
+def calculate_error_severity(custom_error_stats):
+    return {
+        "airline_name_null": "high" if custom_error_stats.get("airline_name_null", 0) > 5 else "medium" if custom_error_stats.get("airline_name_null", 0) > 0 else "none",
+        "negative_duration": "high" if custom_error_stats.get("negative_duration", 0) > 5 else "medium" if custom_error_stats.get("negative_duration", 0) > 0 else "none",
+        "same_cities": "high" if custom_error_stats.get("same_cities", 0) > 2 else "medium" if custom_error_stats.get("same_cities", 0) > 0 else "none",
+        "invalid_days_left": "medium" if custom_error_stats.get("invalid_days_left", 0) > 0 else "none",
+        "premium_class": "low" if custom_error_stats.get("premium_class", 0) > 0 else "none",
+        "air_india_vistara": "medium" if custom_error_stats.get("air_india_vistara", 0) > 0 else "none",
+        "zero_stops_long_duration": "high" if custom_error_stats.get("zero_stops_long_duration", 0) > 0 else "none"
+    }
 
 # Tasks
 def read_data(**kwargs):
@@ -213,15 +222,7 @@ def save_statistics(**kwargs):
         error_indices, custom_error_stats = get_unexpected_indices(df, file_name)
         
         # Calculate severity levels
-        error_severity = {
-            "airline_name_null": "high" if custom_error_stats["airline_name_null"] > 5 else "medium" if custom_error_stats["airline_name_null"] > 0 else "none",
-            "negative_duration": "high" if custom_error_stats["negative_duration"] > 5 else "medium" if custom_error_stats["negative_duration"] > 0 else "none",
-            "same_cities": "high" if custom_error_stats["same_cities"] > 2 else "medium" if custom_error_stats["same_cities"] > 0 else "none",
-            "invalid_days_left": "medium" if custom_error_stats["invalid_days_left"] > 0 else "none",
-            "premium_class": "low" if custom_error_stats["premium_class"] > 0 else "none",
-            "air_india_vistara": "medium" if custom_error_stats["air_india_vistara"] > 0 else "none",
-            "zero_stops_long_duration": "high" if custom_error_stats["zero_stops_long_duration"] > 0 else "none"
-        }
+        error_severity = calculate_error_severity(custom_error_stats)
     except Exception as e:
         logger.error(f"Error running custom validations for {file_name}: {str(e)}")
         error_indices = []
@@ -285,15 +286,7 @@ def send_alerts(**kwargs):
         error_indices, custom_error_stats = get_unexpected_indices(df, file_name)
         
         # Calculate severity levels
-        error_severity = {
-            "airline_name_null": "high" if custom_error_stats["airline_name_null"] > 5 else "medium" if custom_error_stats["airline_name_null"] > 0 else "none",
-            "negative_duration": "high" if custom_error_stats["negative_duration"] > 5 else "medium" if custom_error_stats["negative_duration"] > 0 else "none",
-            "same_cities": "high" if custom_error_stats["same_cities"] > 2 else "medium" if custom_error_stats["same_cities"] > 0 else "none",
-            "invalid_days_left": "medium" if custom_error_stats["invalid_days_left"] > 0 else "none",
-            "premium_class": "low" if custom_error_stats["premium_class"] > 0 else "none",
-            "air_india_vistara": "medium" if custom_error_stats["air_india_vistara"] > 0 else "none",
-            "zero_stops_long_duration": "high" if custom_error_stats["zero_stops_long_duration"] > 0 else "none"
-        }
+        error_severity = calculate_error_severity(custom_error_stats)
         
         # Determine overall severity
         severities = [sev for sev in error_severity.values() if sev != "none"]
