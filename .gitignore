@@ -178,4 +178,5 @@ input_data
 output_data
 alerts
 airflow/logs/
+data/
 configFiles/processed_files.txt

@@ -1,3 +1,4 @@
+import sys
 import os
 import random
 import pandas as pd
@@ -17,23 +18,10 @@ from great_expectations.core.batch import RuntimeBatchRequest
 import psycopg2
 from psycopg2 import sql
 
-# Database Configuration
-DB_CONFIG = {
-    "dbname": "tfd_db",
-    "user": "tfd_user",
-    "password": "tfd_pass",
-    "host": "tfd_postgres",  # Docker service name
-    "port": "5432"
-}
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from configFiles.config import DB_CONFIG, TEAMS_WEBHOOK_URL
+from configFiles.dbCode import get_connection
 
-# Database Connection Function
-def get_connection():
-    """Establishes a PostgreSQL connection."""
-    try:
-        return psycopg2.connect(**DB_CONFIG)
-    except Exception as e:
-        logging.error(f"Failed to establish database connection: {str(e)}")
-        raise
 
 # Paths
 project_root = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir, os.pardir))
@@ -45,9 +33,6 @@ BAD_DATA_FOLDER = os.path.join(project_root, "output_data", "bad_data")
 os.makedirs(GOOD_DATA_FOLDER, exist_ok=True)
 os.makedirs(BAD_DATA_FOLDER, exist_ok=True)
 
-# Teams webhook URL
-TEAMS_WEBHOOK_URL = "https://epitafr.webhook.office.com/webhookb2/463ace8d-55de-416c-af6f-0d944ddcd0c6@3534b3d7-316c-4bc9-9ede-605c860f49d2/IncomingWebhook/20883631084a48d5b172851613d551d5/2ee1ac5b-a7da-4763-a97e-b0cee3001618/V2ES_q8c8S2QMVddhkpxeM26E-W7v-O-tJPxr8dZP096w1"
-
 # Great Expectations Context
 context = DataContext(context_root_dir="/opt/gx")
 
@@ -57,27 +42,29 @@ def get_unexpected_indices(df, file_name):
     logger = logging.getLogger("airflow.task")
     error_indices = set()
     error_stats = {
-        "spicejet_blank_price": 0,
-        "negative_days_left": 0,
+        "airline_name_null": 0,
+        "negative_duration": 0,
         "same_cities": 0,
-        "invalid_duration": 0,
+        "invalid_days_left": 0,
         "premium_class": 0,
         "air_india_vistara": 0,
         "zero_stops_long_duration": 0
     }
     
     try:
-        # SpiceJet blank prices
-        spicejet_blank_price = df[(df['airline'] == 'SpiceJet') & (df['price'].isna())].index
-        if len(spicejet_blank_price) > 0:
-            error_indices.update(spicejet_blank_price)
-            error_stats["spicejet_blank_price"] = len(spicejet_blank_price)
+        # Check for null values in 'airline' column
+        airline_name_null = df[df['airline'].isna()].index
+        if len(airline_name_null) > 0:
+            error_indices.update(airline_name_null)
+            error_stats["airline_name_null"] = len(airline_name_null)
 
-        # Negative days left
-        negative_days_left = df[df['days_left'] < 0].index
-        if len(negative_days_left) > 0:
-            error_indices.update(negative_days_left)
-            error_stats["negative_days_left"] = len(negative_days_left)
+
+        # Negative duration values - convert to numeric first (safe conversion)
+        duration_numeric = pd.to_numeric(df['duration'], errors='coerce')
+        negative_duration = df[(duration_numeric < 0) & (duration_numeric.notna())].index
+        if len(negative_duration) > 0:
+            error_indices.update(negative_duration)
+            error_stats["negative_duration"] = len(negative_duration)
 
         # Same source and destination cities
         same_cities = df[df['source_city'] == df['destination_city']].index
@@ -85,11 +72,13 @@ def get_unexpected_indices(df, file_name):
             error_indices.update(same_cities)
             error_stats["same_cities"] = len(same_cities)
 
-        # Invalid duration values
-        invalid_duration = df[df['duration'].astype(str).isin(['Yes', 'No'])].index
-        if len(invalid_duration) > 0:
-            error_indices.update(invalid_duration)
-            error_stats["invalid_duration"] = len(invalid_duration)
+        # Invalid days_left values (checking for non-numeric values like 'Yes', 'No')
+        # Convert days_left to string safely and check for invalid values
+        days_left_str = df['days_left'].astype(str)
+        invalid_days_left = df[days_left_str.isin(['Yes', 'No'])].index
+        if len(invalid_days_left) > 0:
+            error_indices.update(invalid_days_left)
+            error_stats["invalid_days_left"] = len(invalid_days_left)
 
         # Premium travel class
         premium_class = df[df['travel_class'] == 'Premium'].index
@@ -106,7 +95,7 @@ def get_unexpected_indices(df, file_name):
 
         # Zero stops with long duration
         temp_duration = pd.to_numeric(df['duration'], errors='coerce')
-        zero_stops_long_duration = df[(df['stops'] == 'zero') & (temp_duration > 20)].index
+        zero_stops_long_duration = df[(df['stops'] == 'zero') & (temp_duration > 20) & (temp_duration.notna())].index
         if len(zero_stops_long_duration) > 0:
             error_indices.update(zero_stops_long_duration)
             error_stats["zero_stops_long_duration"] = len(zero_stops_long_duration)
@@ -138,7 +127,7 @@ def validate_data(**kwargs):
     logger = logging.getLogger("airflow.task")
     file_path = kwargs['ti'].xcom_pull(key='file_path', task_ids='read_data')
     file_name = kwargs['ti'].xcom_pull(key='file_name', task_ids='read_data')
-    
+
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
         raise FileNotFoundError(f"File {file_path} not found")
@@ -167,41 +156,32 @@ def validate_data(**kwargs):
         success = results["success"]
         validation_results = results["run_results"]
         
-        # Get the most recent validation file for this run
+        # Get validation URL
         specific_validation_url = None
         try:
-            validations_base_path = "/Users/jatinkumarparmar/Documents/GitHub/dsp_project/dsp-g6-s1-25-tfd/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
-            if os.path.exists(validations_base_path):
-                validation_dirs = []
-                for item in os.listdir(validations_base_path):
-                    item_path = os.path.join(validations_base_path, item)
-                    if os.path.isdir(item_path):
-                        validation_dirs.append((item_path, os.path.getmtime(item_path)))
-                
-                validation_dirs.sort(key=lambda x: x[1], reverse=True)
-                
-                if validation_dirs:
-                    most_recent_dir, _ = validation_dirs[0]
-                    html_files = [f for f in os.listdir(most_recent_dir) if f.endswith('.html')]
-                    if html_files:
-                        html_file = html_files[0]
-                        dir_name = os.path.basename(most_recent_dir)
-                        specific_validation_url = f"file:///opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite/{dir_name}/{html_file}"
-        
-        except Exception as e:
-            logger.error(f"Error finding specific validation URL: {str(e)}")
-        
-        # Fallback to general data docs URL if specific URL not found
-        if not specific_validation_url:
-            for result_id, result in validation_results.items():
+            # Try to get URL from actions_results first
+            for result in validation_results.values():
                 if 'actions_results' in result and 'update_data_docs' in result['actions_results']:
                     data_docs_urls = result['actions_results']['update_data_docs'].get('local_site')
                     if data_docs_urls:
                         specific_validation_url = data_docs_urls
                         break
+            
+            # Fallback: search for any HTML file in validations directory
+            if not specific_validation_url:
+                validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
+                if os.path.exists(validations_base_path):
+                    for root, dirs, files in os.walk(validations_base_path):
+                        for file in files:
+                            if file.endswith('.html'):
+                                specific_validation_url = f"file://{os.path.join(root, file)}"
+                                break
+                        if specific_validation_url:
+                            break
+        except Exception as e:
+            logger.error(f"Error finding validation URL: {str(e)}")
         
         logger.info(f"Validation completed for {file_name}, success: {success}")
-        
         kwargs['ti'].xcom_push(key='success', value=success)
         kwargs['ti'].xcom_push(key='data_frame', value=df.to_dict('records'))
         kwargs['ti'].xcom_push(key='data_docs_url', value=specific_validation_url)
@@ -234,12 +214,12 @@ def save_statistics(**kwargs):
         
         # Calculate severity levels
         error_severity = {
-            "spicejet_blank_price": "high" if custom_error_stats["spicejet_blank_price"] > 5 else "medium" if custom_error_stats["spicejet_blank_price"] > 0 else "none",
-            "negative_days_left": "high" if custom_error_stats["negative_days_left"] > 5 else "medium" if custom_error_stats["negative_days_left"] > 0 else "none",
+            "airline_name_null": "high" if custom_error_stats["airline_name_null"] > 5 else "medium" if custom_error_stats["airline_name_null"] > 0 else "none",
+            "negative_duration": "high" if custom_error_stats["negative_duration"] > 5 else "medium" if custom_error_stats["negative_duration"] > 0 else "none",
             "same_cities": "high" if custom_error_stats["same_cities"] > 2 else "medium" if custom_error_stats["same_cities"] > 0 else "none",
-            "invalid_duration": "medium" if custom_error_stats["invalid_duration"] > 0 else "none",
-            "premium_class": "medium" if custom_error_stats["premium_class"] > 0 else "none",
-            "air_india_vistara": "low" if custom_error_stats["air_india_vistara"] > 0 else "none",
+            "invalid_days_left": "medium" if custom_error_stats["invalid_days_left"] > 0 else "none",
+            "premium_class": "low" if custom_error_stats["premium_class"] > 0 else "none",
+            "air_india_vistara": "medium" if custom_error_stats["air_india_vistara"] > 0 else "none",
             "zero_stops_long_duration": "high" if custom_error_stats["zero_stops_long_duration"] > 0 else "none"
         }
     except Exception as e:
@@ -264,6 +244,11 @@ def save_statistics(**kwargs):
         else:
             overall_severity = "low"
     
+    # Push XCom data for send_alerts (do this before database save to ensure it's always available)
+    kwargs['ti'].xcom_push(key='custom_error_stats', value=custom_error_stats)
+    kwargs['ti'].xcom_push(key='overall_severity', value=overall_severity)
+    kwargs['ti'].xcom_push(key='error_count', value=error_count)
+    
     # Save to database
     try:
         with get_connection() as conn:
@@ -283,144 +268,114 @@ def save_statistics(**kwargs):
                 logger.info(f"Saved statistics for {file_name}: {total_rows} rows, {invalid_rows} invalid")
     except Exception as e:
         logger.error(f"Error saving statistics to database for {file_name}: {str(e)}")
-        raise
-    
-    # Push XCom data for send_alerts
-    kwargs['ti'].xcom_push(key='custom_error_stats', value=custom_error_stats)
-    kwargs['ti'].xcom_push(key='overall_severity', value=overall_severity)
-    kwargs['ti'].xcom_push(key='error_count', value=error_count)
+        # Don't raise the exception - XCom data is already pushed, so alerts can still be sent
+        logger.warning(f"Database save failed for {file_name}, but XCom data is available for alerts")
 
 def send_alerts(**kwargs):
     """Send alerts to Teams and save to file."""
     logger = logging.getLogger("airflow.task")
-    
     file_name = kwargs['ti'].xcom_pull(key='file_name', task_ids='read_data')
     success = kwargs['ti'].xcom_pull(key='success', task_ids='validate_data')
-    custom_error_stats = kwargs['ti'].xcom_pull(key='custom_error_stats', task_ids='save_statistics')
-    error_count = kwargs['ti'].xcom_pull(key='error_count', task_ids='save_statistics')
-    overall_severity = kwargs['ti'].xcom_pull(key='overall_severity', task_ids='save_statistics')
+    df_dict = kwargs['ti'].xcom_pull(key='data_frame', task_ids='validate_data')
     data_docs_url = kwargs['ti'].xcom_pull(key='data_docs_url', task_ids='validate_data')
     
-    # Fallback to database if XCom data is missing
-    if any(x is None for x in [custom_error_stats, error_count, overall_severity]):
-        try:
-            with get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT error_details, error_count, severity FROM data_quality_stats WHERE filename = %s ORDER BY timestamp DESC LIMIT 1",
-                        (file_name,)
-                    )
-                    result = cursor.fetchone()
-                    if result:
-                        custom_error_stats = result[0] if isinstance(result[0], dict) else json.loads(result[0]) if result[0] else {}
-                        error_count = result[1] if result[1] is not None else 0
-                        overall_severity = result[2]
-                    else:
-                        raise ValueError(f"No database entry found for {file_name}")
-        except Exception as e:
-            logger.error(f"Failed to query database for {file_name}: {str(e)}")
-            raise
+    # Calculate error statistics
+    try:
+        df = pd.DataFrame(df_dict)
+        error_indices, custom_error_stats = get_unexpected_indices(df, file_name)
+        
+        # Calculate severity levels
+        error_severity = {
+            "airline_name_null": "high" if custom_error_stats["airline_name_null"] > 5 else "medium" if custom_error_stats["airline_name_null"] > 0 else "none",
+            "negative_duration": "high" if custom_error_stats["negative_duration"] > 5 else "medium" if custom_error_stats["negative_duration"] > 0 else "none",
+            "same_cities": "high" if custom_error_stats["same_cities"] > 2 else "medium" if custom_error_stats["same_cities"] > 0 else "none",
+            "invalid_days_left": "medium" if custom_error_stats["invalid_days_left"] > 0 else "none",
+            "premium_class": "low" if custom_error_stats["premium_class"] > 0 else "none",
+            "air_india_vistara": "medium" if custom_error_stats["air_india_vistara"] > 0 else "none",
+            "zero_stops_long_duration": "high" if custom_error_stats["zero_stops_long_duration"] > 0 else "none"
+        }
+        
+        # Determine overall severity
+        severities = [sev for sev in error_severity.values() if sev != "none"]
+        overall_severity = None
+        if severities:
+            if "high" in severities:
+                overall_severity = "high"
+            elif "medium" in severities:
+                overall_severity = "medium"
+            else:
+                overall_severity = "low"
+        
+        error_count = sum(custom_error_stats.values())
+        
+    except Exception as e:
+        logger.error(f"Error calculating statistics for {file_name}: {str(e)}")
+        custom_error_stats = {}
+        error_count = 0
+        overall_severity = None
     
-    if overall_severity is None:
-        overall_severity = "none"
-    
-    # Process data docs URL to make it clickable
+    # Process data docs URL
     clickable_data_docs_url = "N/A"
     if data_docs_url:
-        # Convert file:// URL to a web-accessible URL
         if data_docs_url.startswith("file:///opt/gx/"):
-            # Use the local web server URL we set up
             web_base_url = "http://localhost:8081/gx"
-            # Remove the file:///opt/gx/ prefix and get the relative path
-            relative_path = data_docs_url.replace("file:///opt/gx/", "")
-            # Clean up any potential path issues
-            relative_path = relative_path.replace("//", "/")
+            relative_path = data_docs_url.replace("file:///opt/gx/", "").replace("//", "/")
             clickable_data_docs_url = f"{web_base_url}/{relative_path}"
         else:
             clickable_data_docs_url = data_docs_url
+    else:
+        # Fallback: search for any HTML file
+        validations_base_path = "/opt/gx/uncommitted/data_docs/local_site/validations/expectations_suite"
+        if os.path.exists(validations_base_path):
+            for root, dirs, files in os.walk(validations_base_path):
+                for file in files:
+                    if file.endswith('.html'):
+                        clickable_data_docs_url = f"http://localhost:8081/gx/{os.path.join(root, file).replace('/opt/gx/', '')}"
+                        break
+                if clickable_data_docs_url != "N/A":
+                    break
     
-    # Create alert content (keeping original format)
+    # Create alert content
     if success:
         alert_title = f"Data Ingestion Success: {file_name}"
-        alert_text = f"""
-        [DATA INGESTION SUCCESS]
-        File: {file_name}
-        Status: All validations passed successfully.
-        Data quality statistics saved to database.
-        """
+        alert_text = f"[DATA INGESTION SUCCESS]\nFile: {file_name}\nStatus: All validations passed successfully."
         color = "#008000"
     else:
         error_breakdown = "\n".join([f"{error_type}: {count}" for error_type, count in custom_error_stats.items() if count > 0])
         if not error_breakdown:
-            error_breakdown = "No specific error types detected."
+            error_breakdown = "Great Expectations validation failed - check Data Docs for details."
         
-        # Create clickable link for data docs URL
-        if clickable_data_docs_url != "N/A":
-            data_docs_link = f'<a href="{clickable_data_docs_url}">View Data Docs</a>'
-        else:
-            data_docs_link = "N/A"
+        data_docs_link = f'<a href="{clickable_data_docs_url}">View Data Docs</a>' if clickable_data_docs_url != "N/A" else "N/A"
         
         alert_title = f"Data Quality Alert: {file_name}"
-        alert_text = f"""
-        [DATA QUALITY ALERT] - {overall_severity}
-        File: {file_name}
-        Total failed expectations: {error_count}
-        Error breakdown:
-        {error_breakdown}
-        Please review the Data Docs for detailed validation results: {data_docs_link}
-        """
-        color_map = {"high": "#FF0000", "medium": "#FFA500", "low": "#FFFF00", "none": "#008000"}
-        color = color_map.get(overall_severity, "#FFFF00")
+        alert_text = f"""[DATA QUALITY ALERT] - {overall_severity if overall_severity else 'no issues detected'}
+File: {file_name}
+Great Expectations Validation: FAILED
+Custom Validation Issues: {error_count}
+Error breakdown:
+{error_breakdown}
+Please review the Data Docs for detailed validation results: {data_docs_link}"""
+        
+        color_map = {"high": "#FF0000", "medium": "#FFA500", "low": "#FFFF00"}
+        color = color_map.get(overall_severity, "#FFA500") if overall_severity else "#FFA500"
     
     # Save alert to file
     try:
         alert_file = os.path.join(project_root, "alerts", f"alert_{file_name}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt")
         os.makedirs(os.path.dirname(alert_file), exist_ok=True)
-        
         with open(alert_file, 'w') as f:
             f.write(f"Title: {alert_title}\nColor: {color}\n\n{alert_text}")
-        logger.info(f"Alert logged to {alert_file}")
     except Exception as e:
         logger.error(f"Failed to write alert file: {str(e)}")
     
-    # Send to Teams (keeping original format, just making URL clickable)
-    # Create separate text for Teams with proper HTML formatting
-    if success:
-        teams_text = f"""
-        [DATA INGESTION SUCCESS]
-        File: {file_name}
-        Status: All validations passed successfully.
-        Data quality statistics saved to database.
-        """
-    else:
-        error_breakdown_text = "\n".join([f"{error_type}: {count}" for error_type, count in custom_error_stats.items() if count > 0])
-        if not error_breakdown_text:
-            error_breakdown_text = "No specific error types detected."
-        
-        # Create clickable link for data docs URL
-        if clickable_data_docs_url != "N/A":
-            data_docs_link = f'<a href="{clickable_data_docs_url}">View Data Docs</a>'
-        else:
-            data_docs_link = "N/A"
-        
-        teams_text = f"""
-        [DATA QUALITY ALERT] - {overall_severity}
-        File: {file_name}
-        Total failed expectations: {error_count}
-        Error breakdown:
-        {error_breakdown_text}
-        Please review the Data Docs for detailed validation results: {data_docs_link}
-        """
-    
+    # Send to Teams
+    teams_text = alert_text.replace("\n", "<br>")
     teams_payload = {
         "@type": "MessageCard",
         "@context": "http://schema.org/extensions",
         "themeColor": color,
         "summary": alert_title,
-        "sections": [{
-            "activityTitle": alert_title,
-            "text": teams_text.replace("\n", "<br>")
-        }]
+        "sections": [{"activityTitle": alert_title, "text": teams_text}]
     }
     
     headers = {'Content-Type': 'application/json'}
@@ -428,10 +383,10 @@ def send_alerts(**kwargs):
         try:
             response = requests.post(TEAMS_WEBHOOK_URL, headers=headers, json=teams_payload, timeout=10)
             if response.status_code == 200:
-                logger.info(f"Successfully sent alert to Microsoft Teams for {file_name}")
+                logger.info(f"Alert sent to Teams for {file_name}")
                 break
             else:
-                logger.warning(f"Teams request failed: {response.status_code} - {response.text}")
+                logger.warning(f"Teams request failed: {response.status_code}")
         except requests.exceptions.RequestException as e:
             logger.warning(f"Teams request failed (attempt {attempt + 1}): {str(e)}")
         if attempt < 2:
@@ -539,4 +494,5 @@ with dag:
     )
 
     # Task dependencies
-    read_data_task >> validate_data_task >> save_statistics_task >> [send_alerts_task, split_and_save_data_task]
+    read_data_task >> validate_data_task
+    validate_data_task >> [save_statistics_task, send_alerts_task, split_and_save_data_task]
