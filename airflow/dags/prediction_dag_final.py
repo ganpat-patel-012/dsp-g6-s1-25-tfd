@@ -6,15 +6,12 @@ from pendulum import today
 import pandas as pd
 import os
 import sys
-import requests
-import psycopg2
-from psycopg2 import sql
 from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from configFiles.config import DB_CONFIG, API_URL
 from configFiles.dbCode import insert_prediction
-from configFiles.makePrediction import get_prediction
+from configFiles.makePrediction import get_prediction, get_batch_prediction
 
 # Paths
 GOOD_DATA_FOLDER = "/opt/output_data/good_data"
@@ -74,7 +71,7 @@ def prediction_dag():
 
     @task
     def make_predictions(files: list):
-        """Make predictions on the new files by calling the prediction API."""
+        """Make predictions on the new files by calling the prediction API and perform batch inserts."""
         if not files:
             logger.info("No files provided for predictions.")
             return
@@ -98,31 +95,39 @@ def prediction_dag():
                 if df_filtered.shape[0] != df.shape[0]:
                     logger.warning(f"Some rows removed in {file} due to same source & destination.")
 
-                results = []
-                for _, row in df_filtered.iterrows():
-                    payload = row.to_dict()
-                    try:
-                        predicted_price = get_prediction(payload)
-                        result_data = {
-                            **payload,
-                            "predicted_price": predicted_price,
-                            "prediction_source": "Scheduled Predictions",
-                            "prediction_type": "Scheduled Job"
-                        }
-                        msg = insert_prediction(result_data)
-                        print(msg)  # Log the message
-                        logger.info(f"Prediction result for row in {file}: {msg}")
-                        results.append(result_data)
-                    except Exception as e:
-                        logger.error(f"Error predicting for row in {file}: {str(e)}")
-                        continue
+                if df_filtered.empty:
+                    logger.warning(f"No valid rows to predict in {file}.")
+                    continue
 
-                # Mark file as processed only if at least one row was successfully predicted
-                if results:
-                    processed.append(os.path.basename(file))
-                    logger.info(f"File {file} marked as processed.")
-                else:
-                    logger.warning(f"No successful predictions for {file}, not marking as processed.")
+                # Prepare payload for batch prediction
+                payload_list = df_filtered.to_dict(orient="records")
+                try:
+                    predictions = get_batch_prediction(payload_list)
+                    results = []
+                    for i, pred in enumerate(predictions):
+                        result_data = {
+                            **payload_list[i],
+                            "predicted_price": pred["predicted_price"],
+                            "prediction_source": "Scheduled Predictions",
+                            "prediction_type": "Scheduled Job",
+                            "prediction_time": datetime.now()
+                        }
+                        results.append(result_data)
+
+                    # Perform batch insert for all predictions in the file
+                    msg = insert_prediction(results)
+                    logger.info(f"Batch prediction result for {file}: {msg}")
+
+                    # Mark file as processed if at least one row was successfully predicted
+                    if results:
+                        processed.append(os.path.basename(file))
+                        logger.info(f"File {file} marked as processed.")
+                    else:
+                        logger.warning(f"No successful predictions for {file}, not marking as processed.")
+
+                except Exception as e:
+                    logger.error(f"Error predicting for {file}: {str(e)}")
+                    continue
 
             except Exception as e:
                 logger.error(f"Error processing {file}: {str(e)}")

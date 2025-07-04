@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from configFiles.makePrediction import get_prediction, get_batch_prediction
 from configFiles.dbCode import insert_prediction
+from datetime import datetime
 
 def show():
     st.title("✈️ Flight Price Prediction")
@@ -64,15 +65,16 @@ def show():
                     payload_list = df_filtered.to_dict(orient="records")
                     predictions = get_batch_prediction(payload_list)
                     
-                    counter = 0
+                    # Add predicted price and metadata to each record
                     for i, pred in enumerate(predictions):
                         payload_list[i]["predicted_price"] = pred["predicted_price"]
                         payload_list[i]["prediction_source"] = "WebApp"
                         payload_list[i]["prediction_type"] = "Multiple"
-                        msg = insert_prediction(payload_list[i])
-                        counter += 1
+                        payload_list[i]["prediction_time"] = datetime.now()
 
-                    st.success(f"✅ Batch {counter} predictions saved successfully. {msg}")
+                    # Perform batch insert
+                    msg = insert_prediction(payload_list)
+                    st.success(f"✅ Batch {len(payload_list)} predictions saved successfully. {msg}")
                     st.dataframe(pd.DataFrame(payload_list), use_container_width=True)
 
 show()
