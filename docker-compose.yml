@@ -20,7 +20,7 @@ services:
       retries: 5
     networks:
       - tfd_network
-
+ 
   airflow-init:
     image: apache/airflow:2.8.1
     container_name: tfd_airflow_init
@@ -36,13 +36,13 @@ services:
       - ./requirements.txt:/requirements.txt
       - ./database:/opt/airflow/database
     command: >
-      bash -c "pip install --no-cache-dir -r /requirements.txt && 
-               until airflow db check; do echo 'Waiting for PostgreSQL...'; sleep 2; done && 
-               if ! airflow db check-migrations; then airflow db init; fi && 
+      bash -c "pip install --no-cache-dir -r /requirements.txt &&
+               until airflow db check; do echo 'Waiting for PostgreSQL...'; sleep 2; done &&
+               if ! airflow db check-migrations; then airflow db init; fi &&
                airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true"
     networks:
       - tfd_network
-
+ 
   airflow:
     image: apache/airflow:2.8.1
     container_name: tfd_airflow
@@ -74,7 +74,7 @@ services:
       bash -c "pip install --no-cache-dir -r /requirements.txt && airflow webserver & airflow scheduler"
     networks:
       - tfd_network
-
+ 
   fastapi:
     build: ./
     container_name: tfd_fastapi
@@ -88,7 +88,7 @@ services:
       - ./:/app
     networks:
       - tfd_network
-
+ 
   streamlit:
     build: ./
     container_name: tfd_streamlit
@@ -102,7 +102,7 @@ services:
       - ./:/app
     networks:
       - tfd_network
-
+ 
   grafana:
     image: grafana/grafana:latest
     container_name: tfd_grafana
@@ -119,12 +119,23 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     networks:
       - tfd_network
-
+  
+  gx-docs-server:
+    image: nginx:alpine
+    container_name: tfd_gx_docs
+    ports:
+      - "8081:80"
+    volumes:
+      - ./gx:/usr/share/nginx/html/gx:ro
+    restart: unless-stopped
+    networks:
+      - tfd_network
+ 
 volumes:
   pg_data:
   grafana_data:
   database:
-
+ 
 networks:
   tfd_network:
     driver: bridge

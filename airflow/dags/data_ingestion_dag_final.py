@@ -330,7 +330,7 @@ def send_alerts(**kwargs):
     
     # Create alert content
     if success:
-        alert_title = f"Data Ingestion Success: {file_name}"
+        alert_title = f"Data Ingestion Success:"
         alert_text = f"[DATA INGESTION SUCCESS]\nFile: {file_name}\nStatus: All validations passed successfully."
         color = "#008000"
     else:
@@ -340,14 +340,14 @@ def send_alerts(**kwargs):
         
         data_docs_link = f'<a href="{clickable_data_docs_url}">View Data Docs</a>' if clickable_data_docs_url != "N/A" else "N/A"
         
-        alert_title = f"Data Quality Alert: {file_name}"
-        alert_text = f"""[DATA QUALITY ALERT] - {overall_severity if overall_severity else 'no issues detected'}
-File: {file_name}
-Great Expectations Validation: FAILED
-Custom Validation Issues: {error_count}
-Error breakdown:
-{error_breakdown}
-Please review the Data Docs for detailed validation results: {data_docs_link}"""
+        alert_title = f"Data Quality Alert: "
+        alert_text = f"""File: {file_name}
+        Severity - {overall_severity if overall_severity else 'no issues detected'}
+        Great Expectations Validation: FAILED
+        Custom Validation Issues: {error_count}
+        Error breakdown:
+        {error_breakdown}
+        Please review the Data Docs for detailed validation results: {data_docs_link}"""
         
         color_map = {"high": "#FF0000", "medium": "#FFA500", "low": "#FFFF00"}
         color = color_map.get(overall_severity, "#FFA500") if overall_severity else "#FFA500"
