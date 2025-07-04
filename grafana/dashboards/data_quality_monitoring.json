@@ -1,0 +1,147 @@
+{
+  "id": null,
+  "title": "Data Quality Monitoring",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Valid vs Invalid Rows (%)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgresql-datasource"
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "refId": "A",
+          "rawSql": "SELECT\n  timestamp AS time,\n  ROUND(100.0 * valid_rows / total_rows, 2) AS valid_percentage,\n  ROUND(100.0 * invalid_rows / total_rows, 2) AS invalid_percentage\nFROM data_quality_stats\nWHERE $__timeFilter(timestamp)\nORDER BY time;"
+        }
+      ],
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Error Types (Last 10 Minutes)",
+      "type": "barchart",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgresql-datasource"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "rawSql": "WITH exploded AS (\n  SELECT\n    timestamp,\n    jsonb_each_text(error_details) AS error_pair\n  FROM data_quality_stats\n  WHERE timestamp > now() - interval '10 minutes'\n)\nSELECT\n  (error_pair).key AS error_type,\n  SUM((error_pair).value::int) AS error_count\nFROM exploded\nGROUP BY (error_pair).key\nORDER BY error_count DESC;"
+        }
+      ],
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "showValue": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "title": "File Severity Levels",
+      "type": "piechart",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgresql-datasource"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n  severity,\n  COUNT(*) AS count\nFROM data_quality_stats\nWHERE $__timeFilter(timestamp)\nGROUP BY severity;"
+        }
+      ],
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Top 10 Faulty Files",
+      "type": "barchart",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgresql-datasource"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "refId": "A",
+          "rawSql": "SELECT\n  filename,\n  error_count\nFROM data_quality_stats\nWHERE error_count IS NOT NULL\nORDER BY error_count DESC\nLIMIT 10;"
+        }
+      ],
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "auto"
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+  }
+}
