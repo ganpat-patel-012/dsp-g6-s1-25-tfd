@@ -180,3 +180,8 @@ alerts
 airflow/logs/
 data/
 configFiles/processed_files.txt
+database/
+project_instructions/
+ airflow/.DS_Store
+ airflow/.DS_Store
+.DS_Store
