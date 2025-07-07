@@ -17,6 +17,7 @@ from great_expectations.data_context import DataContext
 from great_expectations.core.batch import RuntimeBatchRequest
 import psycopg2
 from psycopg2 import sql
+from airflow.exceptions import AirflowSkipException
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from configFiles.config import DB_CONFIG, TEAMS_WEBHOOK_URL
@@ -120,8 +121,8 @@ def read_data(**kwargs):
     logger = logging.getLogger("airflow.task")
     files = [f for f in os.listdir(RAW_DATA_FOLDER) if f.endswith('.csv')]
     if not files:
-        logger.error(f"No CSV files found in {RAW_DATA_FOLDER}")
-        raise FileNotFoundError(f"No CSV files found in {RAW_DATA_FOLDER}")
+        logger.warning(f"No CSV files found in {RAW_DATA_FOLDER}, skipping DAG run.")
+        raise AirflowSkipException(f"No CSV files found in {RAW_DATA_FOLDER}, skipping DAG run.")
     
     file_name = random.choice(files)
     file_path = os.path.join(RAW_DATA_FOLDER, file_name)
